@@ -1,0 +1,48 @@
+name: Scrape SPHEREx images
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly Sunday 03:30 UTC — a bounded, polite crawl that avoids hammering IRSA.
+    - cron: "30 3 * * 0"
+
+permissions:
+  contents: read
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
+      SPHEREX_SIA_URL: ${{ secrets.SPHEREX_SIA_URL }}
+      # Keep the crawl polite by default; override via repository variables if needed.
+      SCRAPE_DELAY: ${{ vars.SCRAPE_DELAY || '5' }}
+      SCRAPE_MAX_RECORDS: ${{ vars.SCRAPE_MAX_RECORDS || '5' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install scrape dependencies
+        run: pip install -r scripts/requirements-scrape.txt
+
+      - name: Scrape IRSA -> Supabase
+        run: bash scripts/scrape.sh
+
+      - name: Upload local manifests (backup)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scrape-manifests
+          path: |
+            data/raw/manifest.json
+            data/parsed/manifest.json
+          retention-days: 7

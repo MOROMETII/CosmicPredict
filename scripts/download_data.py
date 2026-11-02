@@ -17,6 +17,7 @@ import json
 import os
 import ssl
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -30,6 +31,49 @@ from astropy.io.votable import parse
 
 
 USER_AGENT = "cosmic-predict-data-loader/0.1"
+
+# Transient HTTP statuses worth retrying with exponential backoff so the
+# scraper does not hammer IRSA or trip its rate limiter.
+_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+_RETRY_BASE_DELAY = 5.0
+_RETRY_MAX_DELAY = 60.0
+
+
+def _retry_delay(error: urllib.error.HTTPError, attempt: int) -> float:
+    retry_after = error.headers.get("Retry-After") if error.headers else None
+    if retry_after:
+        try:
+            return min(float(retry_after), _RETRY_MAX_DELAY)
+        except ValueError:
+            pass
+    return min(_RETRY_BASE_DELAY * (2 ** attempt), _RETRY_MAX_DELAY)
+
+
+def _open_with_retry(request: urllib.request.Request, *, timeout: float, retries: int = 3):
+    """Open a request, retrying transient failures with polite backoff."""
+    last_error: Exception | None = None
+    for attempt in range(retries):
+        try:
+            return urllib.request.urlopen(
+                request, timeout=timeout, context=ssl.create_default_context()
+            )
+        except urllib.error.HTTPError as error:
+            if error.code in _RETRYABLE_STATUS and attempt < retries - 1:
+                wait = _retry_delay(error, attempt)
+                print(f"transient HTTP {error.code}; retrying in {wait:.1f}s", file=sys.stderr)
+                time.sleep(wait)
+                last_error = error
+                continue
+            raise
+        except urllib.error.URLError as error:
+            if attempt < retries - 1:
+                wait = min(_RETRY_BASE_DELAY * (2 ** attempt), _RETRY_MAX_DELAY)
+                print(f"connection error {error}; retrying in {wait:.1f}s", file=sys.stderr)
+                time.sleep(wait)
+                last_error = error
+                continue
+            raise
+    raise last_error  # type: ignore[misc]
 
 
 def build_query_url(
@@ -94,7 +138,7 @@ def fetch_votable(url: str, *, timeout: float) -> list[dict[str, Any]]:
         },
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with _open_with_retry(request, timeout=timeout) as response:
             content = response.read()
     except urllib.error.HTTPError as error:
         body = error.read()[:500].decode("utf-8", errors="replace")
@@ -158,9 +202,7 @@ def download_file(url: str, destination: Path, *, timeout: float) -> None:
 
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     temporary = destination.with_suffix(destination.suffix + ".part")
-    with urllib.request.urlopen(
-        request, timeout=timeout, context=ssl.create_default_context()
-    ) as response:
+    with _open_with_retry(request, timeout=timeout) as response:
         with temporary.open("wb") as output:
             while chunk := response.read(1024 * 1024):
                 output.write(chunk)
@@ -179,8 +221,13 @@ def download_sample(
     end_time: str | None,
     max_records: int,
     timeout: float,
+    delay: float = 0.0,
 ) -> Path:
-    """Query SIA, download products, and write a reproducible manifest."""
+    """Query SIA, download products, and write a reproducible manifest.
+
+    ``delay`` adds a fixed sleep between downloads so batch runs stay polite
+    to the archive and avoid rate limiting / IP bans.
+    """
 
     output_dir.mkdir(parents=True, exist_ok=True)
     query_url = build_query_url(
@@ -227,6 +274,8 @@ def download_sample(
                 "record": record,
             }
         )
+        if delay > 0:
+            time.sleep(delay)
 
     manifest_path = output_dir / "manifest.json"
     manifest_path.write_text(
@@ -261,6 +310,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--end-time")
     parser.add_argument("--max-records", type=int, default=20)
     parser.add_argument("--timeout", type=float, default=60.0)
+    parser.add_argument("--delay", type=float, default=0.0, help="seconds to sleep between downloads (rate-limit guard)")
     parser.add_argument("--output", type=Path, default=Path("data/raw"))
     return parser
 
@@ -285,6 +335,7 @@ def main(argv: list[str] | None = None) -> int:
             end_time=args.end_time,
             max_records=args.max_records,
             timeout=args.timeout,
+            delay=args.delay,
         )
     except (OSError, ValueError, urllib.error.URLError, json.JSONDecodeError) as error:
         print(f"data download failed: {error}", file=sys.stderr)
