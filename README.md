@@ -246,30 +246,11 @@ The mock API ensures this works even if live data is slow or unavailable. The re
 
 https://www.spaceappschallenge.org/2026/challenges/planet-x-and-spherex/?tab=details
 
-## Optional JEPA-inspired backend
-
-The initial AI baseline lives in `backend/ai/`. It uses a compact
-domain-specific ViT-style encoder and predicts the latent features of a later
-observation from an earlier one. It has no external pretrained-weight
-dependency, uses a short transformer stack, and is suitable for local CPU/GPU
-training or a small hosted inference worker. `JEPARepresentationModel.loss()`
-is the training objective; `JEPAInference.from_checkpoint()` is the optional
-inference entry point.
-
-The model consumes preprocessed finite arrays with shape `[H, W]`, `[C, H, W]`,
-or `[B, C, H, W]`. Data normalization and FITS/WCS preparation remain outside
-the model so the same documented preprocessing can be reused for training and
-inference. If no checkpoint is configured, inference returns `status:
-"unavailable"` and a null score. Scores are raw latent mean-squared errors,
-not probabilities or validated detections.
-
 To acquire a bounded sample, first verify the current SPHEREx SIA endpoint,
-then run `python scripts/download_data.py --ra <ra> --dec <dec> --band <band>
---service-url <verified-sia-url> --output data/raw`. The script downloads only
+then run `python scripts/download_data.py --ra <ra> --dec <dec> --band <band> --service-url <verified-sia-url> --output data/raw`. The script downloads only
 URLs returned by the query and writes `manifest.json` with the full archive
 record, query URL, source URL, and retrieval time. It does not fabricate
-observations and does not parse FITS; preprocessing for notebook training
-should consume this manifest and use Astropy when installed.
+observations.
 
 ### FITS preprocessing
 
@@ -280,23 +261,10 @@ observation to `[-1, 1]`, and writes ViT-compatible `.npz` patches plus a
 provenance manifest. Invalid or truncated FITS files are recorded under
 `errors` and skipped by default; use `--strict` to fail immediately.
 
-In a notebook:
-
-```python
-from backend.ai.dataset import ObservationPatchDataset
-dataset = ObservationPatchDataset("data/processed/manifest.json")
-sample = dataset[0]
-```
-
 The downloaded files must not be paired merely because they are adjacent in a
 directory. Pair observations only after validating their sky footprint,
 channel/band, and epoch metadata; the manifest retains the source metadata
 needed for that step.
-
-For an explicitly verified pair manifest, use
-`backend.ai.dataset.ObservationPairDataset`. Each record must provide
-`context_sample` and `target_sample` paths; the dataset refuses mismatched
-patch shapes and does not infer pairs automatically.
 
 ### Backend API
 
@@ -305,13 +273,6 @@ Start the backend from the repository root with
 `GET /api/health`, `GET /api/epochs?ra=<ra>&dec=<dec>`,
 `GET /api/images`, `GET /api/images/{observation_id}`, `POST /api/diff`, and
 `POST /api/analyze`. The API reports cached metadata and simplified difference
-scores immediately. `POST /api/analyze` with `"run_jepa": true` loads the
-trained checkpoint once, reuses it for subsequent requests, and returns
-`jepa_score`, `score_kind`, `jepa_status`, and the spatial `anomaly_map`.
-Both `/api/diff` and `/api/analyze` also return thresholded `candidates` with
-their source (`difference` or `jepa`), bounding box, score, and coordinate
-space so the frontend can render overlays without treating them as confirmed
-objects.
-`GET /api/health` reports whether the checkpoint is actually loadable, not
-just whether its file exists. If loading fails, the API returns an explicit
-status instead of inventing an AI score.
+scores immediately. Both `/api/diff` and `/api/analyze` return thresholded
+difference candidates with their bounding box, score, and coordinate space so
+the frontend can render overlays without treating them as confirmed objects.

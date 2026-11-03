@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Box, Button, Chip, CircularProgress, Container, Divider, FormControlLabel, Paper, Slider, Stack, Switch, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, CircularProgress, Container, Divider, Paper, Slider, Stack, TextField, Typography } from "@mui/material";
 import { CheckCircle, ExpandMore, PlayArrow, Refresh, Science } from "@mui/icons-material";
 import { cosmicColors } from "@/theme";
 import { analyzePair, getEpochs, type Analysis, type Candidate, type Observation } from "@/services/api";
@@ -24,7 +24,6 @@ export default function Home() {
   const [dec, setDec] = useState(String(DEFAULT_DEC));
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
-  const [modelEnabled, setModelEnabled] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const loadRegion = async (position = { ra: Number(ra), dec: Number(dec) }) => {
@@ -69,7 +68,7 @@ export default function Home() {
     setScanning(true);
     setMessage(null);
     try {
-      const result = await analyzePair(context.observation_id, target.observation_id, modelEnabled);
+      const result = await analyzePair(context.observation_id, target.observation_id);
       setAnalysis(result);
       setCandidate(result.candidates[0] ?? null);
     } catch {
@@ -136,10 +135,9 @@ export default function Home() {
           <Paper sx={{ flex: 1, p: 2, bgcolor: cosmicColors.panel, border: `1px solid ${cosmicColors.border}` }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center"><Box><Typography sx={{ fontWeight: 800 }}>Change detector</Typography><Typography variant="caption" color="text.secondary">Simplified normalized difference baseline</Typography></Box><Science sx={{ color: cosmicColors.accent }} /></Stack>
             <Button fullWidth variant="contained" startIcon={scanning ? <CircularProgress size={16} color="inherit" /> : <PlayArrow />} onClick={runScan} disabled={scanning || loading || !context || !target} sx={{ mt: 2 }}>{scanning ? "Scanning..." : "Find anomalies"}</Button>
-            <FormControlLabel sx={{ mt: 1 }} control={<Switch checked={modelEnabled} onChange={(event) => setModelEnabled(event.target.checked)} size="small" />} label={<Typography variant="caption">Run optional predictive model</Typography>} />
             {analysis && <Stack direction="row" spacing={2} sx={{ mt: 1.5 }}><Box><Typography variant="caption" color="text.secondary">Candidates</Typography><Typography variant="h6">{analysis.candidates.length}</Typography></Box><Box><Typography variant="caption" color="text.secondary">Difference</Typography><Typography variant="h6">{analysis.difference_score?.toFixed(3) ?? "—"}</Typography></Box></Stack>}
           </Paper>
-          <Paper sx={{ flex: 1, p: 2, bgcolor: cosmicColors.panel, border: `1px solid ${cosmicColors.border}` }}><Typography sx={{ fontWeight: 800, mb: 1 }}>Candidate review</Typography><DiscoveryPanel candidate={candidate} analysis={analysis} /></Paper>
+          <Paper sx={{ flex: 1, p: 2, bgcolor: cosmicColors.panel, border: `1px solid ${cosmicColors.border}` }}><Typography sx={{ fontWeight: 800, mb: 1 }}>Candidate review</Typography><DiscoveryPanel candidate={candidate} /></Paper>
         </Stack>
 
         {analysis && <Paper sx={{ mt: 2, p: 2, bgcolor: cosmicColors.panel, border: `1px solid ${cosmicColors.border}` }}>

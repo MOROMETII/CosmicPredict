@@ -6,14 +6,14 @@ These instructions apply to all agents and contributors working in this reposito
 
 Build COSMIC PREDICT: a SPHEREx time-domain viewer that lets users inspect the same sky region across observation epochs, blink between observations, compute difference images, and inspect candidate changes.
 
-The product's hybrid direction adds an optional JEPA-inspired predictive anomaly signal and optional synthetic transitions.
+The product uses conventional, provenance-preserving difference imaging and optional synthetic visual transitions.
 
 When priorities conflict, use this order:
 
 1. Scientific correctness and provenance.
 2. A reliable working MVP.
 3. Clear, reproducible API and data contracts.
-4. JEPA-inspired AI as an optional, evaluated enhancement.
+4. Clear explanations of candidate limitations and evidence.
 5. Visual polish and interpolation effects.
 
 Do not sacrifice the first four priorities for a flashy demo.
@@ -37,7 +37,7 @@ The product specification establishes:
 
 The agreed plan adds:
 - Conventional difference detection as the scientific baseline.
-- JEPA-inspired latent prediction/anomaly scoring as an optional second signal.
+- Conventional difference imaging and connected-component candidate extraction.
 - A combined ranking that preserves component scores.
 - Optional crossfade/optical-flow/diffusion interpolation, always labelled synthetic.
 
@@ -130,26 +130,7 @@ Candidate records should include, when available:
 
 Do not fabricate missing fields. Use `null`, omit optional values, or return an explicit unavailable status.
 
-## 7. JEPA-inspired AI rules
-
-The AI engine is optional and must not block the core app.
-
-- Use PyTorch.
-- Keep encoder, predictor, scoring, and inference code separate.
-- Prefer a frozen pretrained encoder for initial experiments only after checking license, model interface, and input requirements.
-- Do not assume natural-image/video features transfer to SPHEREx infrared images.
-- Support a lightweight domain-specific encoder or baseline if pretrained features are unsuitable.
-- Predict target latent features from historical observation features.
-- Evaluate on held-out observations/regions; prevent train/test leakage.
-- Produce reproducible latent anomaly scores/maps.
-- Keep model loading/inference optional; app functionality must remain available without a model checkpoint or GPU.
-- If model inference is unavailable, return an explicit unavailable/null result. Never invent a JEPA score.
-- Keep `difference_score` and `jepa_score` separately visible.
-- A combined score must be documented, normalized/calibrated, and must not be called a probability unless calibrated as one.
-- Do not claim the JEPA signal improves detection unless comparison against the conventional baseline demonstrates it.
-- Use the term **JEPA-inspired** unless the implementation genuinely follows a JEPA architecture and objective.
-
-## 8. Interpolation and generative models
+## 7. Interpolation and generative models
 
 Implementation priority:
 1. Blink between real observations.
@@ -242,12 +223,10 @@ Do not:
 - Public-facing explanation of SPHEREx and the app.
 - Offline-capable demo.
 
-### P1 — Hybrid differentiator
-- Reproducible JEPA-inspired latent feature prediction.
-- Separate JEPA anomaly score/map.
-- Combined candidate ranking with component scores visible.
-- Candidate explanation panel.
-- Basic evaluation against the difference-only baseline.
+### P1 — Scientific investigation
+- WCS-aware alignment and uncertainty-aware difference imaging.
+- Candidate explanation panel with provenance and quality flags.
+- Verified target-region catalog and additional cached observations.
 
 ### P2 — Polish/stretch
 - Smooth crossfade or optical-flow transition.
@@ -263,7 +242,7 @@ If time becomes constrained, drop P2 first, then reduce P1 to a small, honest pr
 - Hours 0–4: verify dataset, scaffold app, define API contracts, confirm two epochs.
 - Hours 4–10: viewer, image/epoch endpoints, timeline, blink.
 - Hours 10–16: alignment, difference imaging, candidate extraction.
-- Hours 16–24: JEPA-inspired encoder/predictor and anomaly score.
+- Hours 16–24: quality-aware difference imaging and candidate extraction.
 - Hours 24–30: candidate details, anomaly visualization, optional transition.
 - Hours 30–38: end-to-end integration, offline testing, edge cases.
 - Hours 38–44: demo narrative, slides, backup recording.
@@ -303,4 +282,4 @@ A core feature is done only when:
 
 The MVP is done when a user can select a supported region, see available epochs, view and blink between observations, run difference detection, inspect candidate overlays, and complete the demo using cached data without depending on live IRSA access.
 
-The hybrid milestone is done when optional JEPA-inspired inference produces reproducible outputs, exposes its score separately from the conventional detection score, and can be evaluated against the baseline.
+The extended milestone is done when difference imaging is aligned, quality-aware, reproducible, and supported by additional verified observations.
