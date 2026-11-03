@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any
 
 from backend import config
+from backend.astronomy import compact
+from backend.astronomy.fits_loader import FitsObservation, load_fits_observation
 from backend.storage import local
 from backend.storage.supabase import SupabaseClient, SupabaseError
 
@@ -42,12 +44,21 @@ def is_supabase_available() -> bool:
 
 
 def list_observations() -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
     if _client.available:
         try:
-            return _client.list_observations()
+            records = list(_client.list_observations())
         except SupabaseError as error:
             print(f"Supabase unavailable, using local cache: {error}", file=sys.stderr)
-    return local.list_observations()
+    # Always merge in any local observations not yet persisted to Supabase, so
+    # the catalog is the union of both stores and never hides local backups.
+    seen = {record["observation_id"] for record in records}
+    for record in local.list_observations():
+        if record["observation_id"] not in seen:
+            records.append(record)
+            seen.add(record["observation_id"])
+    records.sort(key=lambda record: record["observation_id"])
+    return records
 
 
 def get_observation(observation_id: str) -> dict[str, Any] | None:
@@ -61,63 +72,80 @@ def get_observation(observation_id: str) -> dict[str, Any] | None:
     return local.get_observation(observation_id)
 
 
-def resolve_asset_path(observation_id: str) -> Path:
-    """Return a local path to the FITS file, downloading from Supabase if needed.
+def load_observation(observation_id: str) -> FitsObservation:
+    """Load an observation's science image + mask, Supabase-first.
 
-    The local cache is written whenever the asset is fetched from Supabase so it
-    serves as a backup if Supabase later becomes unreachable.
+    Downloads the compact ``.npz`` snapshot from Supabase Storage when present,
+    caching it locally as a backup, and otherwise falls back to the local raw
+    FITS file.
     """
     record = get_observation(observation_id)
     if record is None:
         raise FileNotFoundError(f"unknown observation: {observation_id}")
 
-    local_path = record.get("local_path") or Path(record.get("storage_path") or f"{observation_id}.fits").name
-    candidate = config.RAW_DIR / local_path
-    if candidate.is_file():
-        return candidate
-
     storage_path = record.get("storage_path")
-    if _client.available and storage_path:
-        candidate.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            candidate.write_bytes(_client.download_object(storage_path))
-        except SupabaseError as error:
-            raise FileNotFoundError(f"asset unavailable for {observation_id}: {error}") from error
-        return candidate
+    if _client.available and isinstance(storage_path, str) and storage_path.endswith(".npz"):
+        snapshot_path = config.SNAPSHOT_DIR / Path(storage_path).name
+        if not snapshot_path.is_file():
+            snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                snapshot_path.write_bytes(_client.download_object(storage_path))
+            except SupabaseError as error:
+                print(f"Supabase snapshot download failed for {observation_id}, using local FITS: {error}", file=sys.stderr)
+            else:
+                return compact.observation_from_bytes(
+                    snapshot_path.read_bytes(),
+                    header=record.get("header") or {},
+                    path=snapshot_path,
+                )
 
-    raise FileNotFoundError(f"no local or remote asset for {observation_id}")
+    local_fits = config.RAW_DIR / (record.get("local_path") or f"{observation_id}.fits")
+    return load_fits_observation(local_fits)
+
+
+def save_observation_metadata(record: dict[str, Any]) -> dict[str, Any]:
+    """Persist only the observation metadata row (no file upload).
+
+    Useful when the raw FITS exceeds Supabase's upload size limit; the FITS
+    stays in the local cache and the table drives the catalog.
+    """
+    if not _client.available:
+        return record
+    db_record = {column: record.get(column) for column in _DB_COLUMNS}
+    try:
+        _client.upsert_observation(db_record)
+    except SupabaseError as error:
+        print(f"Supabase metadata save failed for {record.get('observation_id')}: {error}", file=sys.stderr)
+        return record
+    return record
 
 
 def upload_observation(
     record: dict[str, Any],
     *,
-    raw_bytes: bytes,
-    parsed_bytes: bytes | None = None,
-    parsed_path: str | None = None,
+    snapshot_bytes: bytes,
+    snapshot_name: str,
 ) -> dict[str, Any]:
-    """Persist a scraped observation to Supabase (Storage + table row).
+    """Persist a compact snapshot (science image + mask) to Supabase Storage.
 
-    Returns the record updated with ``storage_path``/``preview_storage_path``.
-    If Supabase is unavailable the record is returned unchanged so the local
-    cache remains the backup source of truth.
+    The snapshot bytes are uploaded to the ``spherex-images`` bucket and the
+    object key is stored on the metadata row, so the backend loads the image
+    data from Supabase. The raw FITS stays in the local cache as backup.
     """
     if not _client.available:
         return record
 
-    raw_key = f"raw/{record['local_path']}"
-    parsed_key = f"parsed/{parsed_path}" if parsed_path else None
+    snapshot_key = f"parsed/{snapshot_name}"
     try:
-        _client.upload_object(raw_key, raw_bytes, "application/octet-stream")
-        if parsed_key and parsed_bytes is not None:
-            _client.upload_object(parsed_key, parsed_bytes, "application/octet-stream")
+        _client.upload_object(snapshot_key, snapshot_bytes, "application/octet-stream")
         db_record = {column: record.get(column) for column in _DB_COLUMNS}
-        db_record["storage_path"] = raw_key
-        db_record["preview_storage_path"] = parsed_key
+        db_record["storage_path"] = snapshot_key
         _client.upsert_observation(db_record)
     except SupabaseError as error:
         print(f"Supabase upload failed for {record.get('observation_id')}: {error}", file=sys.stderr)
+        record["_uploaded"] = False
         return record
 
-    record["storage_path"] = raw_key
-    record["preview_storage_path"] = parsed_key
+    record["storage_path"] = snapshot_key
+    record["_uploaded"] = True
     return record
