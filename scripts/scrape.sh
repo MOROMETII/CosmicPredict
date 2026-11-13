@@ -5,7 +5,7 @@
 # Tune behaviour via environment variables:
 #   SCRAPE_DELAY        seconds between downloads           (default 5)
 #   SCRAPE_MAX_RECORDS  max images per sky position         (default 5)
-#   SPHEREX_SIA_URL     SIA v2 endpoint                     (default spherex_qr2)
+#   SPHEREX_SIA_URL     SIA v2 endpoint                     (default spherex_qr3)
 #
 # Each invocation skips already-downloaded files and upserts into Supabase, so
 # re-running is safe and incremental.
@@ -13,7 +13,7 @@ set -euo pipefail
 
 DELAY="${SCRAPE_DELAY:-5}"
 MAX_RECORDS="${SCRAPE_MAX_RECORDS:-5}"
-SERVICE_URL="${SPHEREX_SIA_URL:-https://irsa.ipac.caltech.edu/SIA?COLLECTION=spherex_qr2}"
+SERVICE_URL="${SPHEREX_SIA_URL:-https://irsa.ipac.caltech.edu/SIA?COLLECTION=spherex_qr3}"
 SIZE="${SCRAPE_SIZE:-0.5}"
 
 # Coarse all-sky grid (RA step 60 deg, Dec step 40 deg). 30 positions keeps

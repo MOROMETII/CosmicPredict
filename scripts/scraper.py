@@ -8,7 +8,7 @@ The local files are always kept as a backup if Supabase is unreachable.
 
 Example:
     python scripts/scraper.py --ra 83.8 --dec -5.4 --size 0.5 \
-        --service-url "https://irsa.ipac.caltech.edu/SIA?COLLECTION=spherex_qr2" \
+        --service-url "https://irsa.ipac.caltech.edu/SIA?COLLECTION=spherex_qr3" \
         --max-records 5 --delay 5
 """
 
@@ -38,7 +38,7 @@ from backend.astronomy.calibration import robust_normalize  # noqa: E402
 from backend.astronomy.fits_loader import load_fits_observation  # noqa: E402
 from backend.storage import upload_observation  # noqa: E402
 
-DEFAULT_SERVICE_URL = "https://irsa.ipac.caltech.edu/SIA?COLLECTION=spherex_qr2"
+DEFAULT_SERVICE_URL = "https://irsa.ipac.caltech.edu/SIA?COLLECTION=spherex_qr3"
 
 
 def _iso_epoch(value: Any) -> str | None:

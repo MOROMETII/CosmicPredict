@@ -1,183 +1,654 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Alert, Box, Button, Chip, CircularProgress, Container, Divider, Paper, Slider, Stack, TextField, Typography } from "@mui/material";
-import { CheckCircle, ExpandMore, PlayArrow, Refresh, Science } from "@mui/icons-material";
-import { cosmicColors } from "@/theme";
-import { analyzePair, getEpochs, type Analysis, type Candidate, type Observation } from "@/services/api";
-import SpaceProjection from "@/components/SpaceProjection";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Container,
+  Divider,
+  Grid,
+  IconButton,
+  MenuItem,
+  Paper,
+  Select,
+  Slider,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
+} from "@mui/material";
+import { useColorScheme } from "@mui/material/styles";
+import {
+  DarkMode,
+  ExpandLess,
+  ExpandMore,
+  LightMode,
+  Search,
+  TravelExplore,
+  Troubleshoot,
+} from "@mui/icons-material";
+import { nasa } from "@/theme";
+import {
+  analyzeRegion,
+  getHealth,
+  resolveAssetUrl,
+  type Analysis,
+  type Candidate,
+  type Observation,
+  type Timeline,
+  type TimelineFrame,
+} from "@/services/api";
+import TimelinePlayer from "@/components/TimelinePlayer";
 import DiscoveryPanel from "@/components/DiscoveryPanel";
-import { motion } from "framer-motion";
+import LightCurvePanel from "@/components/LightCurvePanel";
+import SpaceProjection from "@/components/SpaceProjection";
 import { featuredTargets } from "@/data/featuredTargets";
 
-const DEFAULT_RA = 1.2184;
-const DEFAULT_DEC = -1.3642;
+const DEFAULT_RA = 269.454; // Barnard's Star — the classic moving target
+const DEFAULT_DEC = 4.693;
+const CUTOUT_SIZE = 256;
+
+const frameDate = (frame: TimelineFrame | null | undefined) =>
+  frame?.epoch
+    ? new Date(frame.epoch).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : "unknown date";
+
+const toObservation = (frame: TimelineFrame): Observation => ({
+  observation_id: frame.observation_id,
+  epoch: frame.epoch,
+  band: frame.band,
+  ra: null,
+  dec: null,
+  source: frame.source,
+  provenance: {},
+  image_url: `/api/images/${frame.observation_id}/preview`,
+  asset_status: "preview_available",
+});
+
+/** The app's own mark — an orbit sweep. (Not an agency logo.) */
+function AppMark() {
+  return (
+    <Box component="svg" viewBox="0 0 40 40" sx={{ width: 34, height: 34, flexShrink: 0 }} aria-hidden>
+      <circle cx="20" cy="20" r="18" fill="none" stroke="#e4e9f1" strokeWidth="2" />
+      <ellipse cx="20" cy="20" rx="17" ry="6.5" fill="none" stroke={nasa.red} strokeWidth="2" transform="rotate(-18 20 20)" />
+      <circle cx="20" cy="20" r="4.5" fill="#e4e9f1" />
+      <circle cx="33.5" cy="13.5" r="2.4" fill={nasa.red} />
+    </Box>
+  );
+}
+
+const emptySubscribe = () => () => {};
+
+function ModeToggle() {
+  const { mode, setMode } = useColorScheme();
+  // true on the client, false during server render — no setState needed.
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
+  if (!mounted) return <Box sx={{ width: 40 }} />;
+  const dark = mode === "dark";
+  return (
+    <Tooltip title={dark ? "Switch to light mode" : "Switch to dark mode"}>
+      <IconButton onClick={() => setMode(dark ? "light" : "dark")} sx={{ color: "#e4e9f1" }}>
+        {dark ? <LightMode /> : <DarkMode />}
+      </IconButton>
+    </Tooltip>
+  );
+}
+
+function StepHeading({ step, title, lead }: { step: string; title: string; lead: string }) {
+  return (
+    <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+      <Box
+        sx={{
+          width: 36,
+          height: 36,
+          flexShrink: 0,
+          borderRadius: "50%",
+          bgcolor: "primary.main",
+          color: "primary.contrastText",
+          display: "grid",
+          placeItems: "center",
+          fontWeight: 800,
+        }}
+      >
+        {step}
+      </Box>
+      <Box>
+        <Typography variant="h6">{title}</Typography>
+        <Typography variant="body2" color="text.secondary">
+          {lead}
+        </Typography>
+      </Box>
+    </Stack>
+  );
+}
 
 export default function Home() {
-  const [observations, setObservations] = useState<Observation[]>([]);
-  const [context, setContext] = useState<Observation | null>(null);
-  const [target, setTarget] = useState<Observation | null>(null);
+  const [position, setPosition] = useState({ ra: DEFAULT_RA, dec: DEFAULT_DEC });
+  const [raInput, setRaInput] = useState(String(DEFAULT_RA));
+  const [decInput, setDecInput] = useState(String(DEFAULT_DEC));
+  const [fov, setFov] = useState(15);
+  const [timeline, setTimeline] = useState<Timeline | null>(null);
+  const [epochA, setEpochA] = useState<string>("");
+  const [epochB, setEpochB] = useState<string>("");
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [candidate, setCandidate] = useState<Candidate | null>(null);
-  const [amount, setAmount] = useState(50);
-  const [ra, setRa] = useState(String(DEFAULT_RA));
-  const [dec, setDec] = useState(String(DEFAULT_DEC));
-  const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-
-  const loadRegion = async (position = { ra: Number(ra), dec: Number(dec) }) => {
-    setLoading(true);
-    setMessage(null);
-    try {
-      const result = await getEpochs(position.ra, position.dec);
-      setObservations(result.observations);
-      setContext(result.observations[0] ?? null);
-      setTarget(result.observations[1] ?? null);
-      setAnalysis(null);
-      setCandidate(null);
-      if (!result.observations.length) setMessage(result.message ?? "No cached observations cover this position.");
-    } catch {
-      setMessage("The backend is not reachable. Start FastAPI on port 8000.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [inputError, setInputError] = useState<string | null>(null);
+  const [provider, setProvider] = useState<string | null>(null);
+  const [show3d, setShow3d] = useState(false);
+  const [showSpectrum, setShowSpectrum] = useState(false);
+  const [morph, setMorph] = useState(50);
 
   useEffect(() => {
-    let active = true;
-    getEpochs(DEFAULT_RA, DEFAULT_DEC).then((result) => {
-      if (!active) return;
-      setObservations(result.observations);
-      setContext(result.observations[0] ?? null);
-      setTarget(result.observations[1] ?? null);
-      if (!result.observations.length) setMessage(result.message ?? "No cached observations cover this position.");
-    }).catch(() => {
-      if (active) setMessage("The backend is not reachable. Start FastAPI on port 8000.");
-    }).finally(() => {
-      if (active) setLoading(false);
-    });
-    return () => { active = false; };
+    // Query-by-URL (?ra=..&dec=..) so views can be shared and embedded.
+    const params = new URLSearchParams(window.location.search);
+    const ra = Number(params.get("ra"));
+    const dec = Number(params.get("dec"));
+    if (params.has("ra") && params.has("dec") && Number.isFinite(ra) && Number.isFinite(dec)) {
+      // One-time sync from the URL after hydration; reading window.location
+      // during render would mismatch the server-rendered HTML.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPosition({ ra, dec });
+      setRaInput(String(ra));
+      setDecInput(String(dec));
+    }
+    getHealth()
+      .then((health) => setProvider(health.provider))
+      .catch(() => setProvider(null));
   }, []);
 
-  const runScan = async () => {
-    if (!context || !target) {
-      setMessage("Select two different observations first.");
+  const goTo = (ra: number, dec: number) => {
+    if (!Number.isFinite(ra) || ra < 0 || ra >= 360 || !Number.isFinite(dec) || dec < -90 || dec > 90) {
+      setInputError("Right Ascension must be 0–360 and Declination −90 to +90 (decimal degrees).");
       return;
     }
+    setInputError(null);
+    setPosition({ ra, dec });
+    setRaInput(String(ra));
+    setDecInput(String(dec));
+    setAnalysis(null);
+    setCandidate(null);
+    setScanError(null);
+    setShowSpectrum(false);
+    window.history.replaceState(null, "", `?ra=${ra}&dec=${dec}`);
+    document.getElementById("player-section")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  };
+
+  const onTimeline = (result: Timeline | null) => {
+    setTimeline(result);
+    setAnalysis(null);
+    setCandidate(null);
+    setScanError(null);
+    const frames = result?.frames ?? [];
+    setEpochA(frames[0]?.observation_id ?? "");
+    setEpochB(frames[frames.length - 1]?.observation_id ?? "");
+  };
+
+  const frames = useMemo(() => timeline?.frames ?? [], [timeline]);
+  const frameA = frames.find((item) => item.observation_id === epochA) ?? null;
+  const frameB = frames.find((item) => item.observation_id === epochB) ?? null;
+  const pixelScale = (fov * 60) / CUTOUT_SIZE;
+
+  const runScan = async () => {
+    if (!epochA || !epochB) return;
     setScanning(true);
-    setMessage(null);
+    setScanError(null);
+    setAnalysis(null);
+    setCandidate(null);
     try {
-      const result = await analyzePair(context.observation_id, target.observation_id);
+      const result = await analyzeRegion(epochA, epochB, position.ra, position.dec, fov, CUTOUT_SIZE);
       setAnalysis(result);
       setCandidate(result.candidates[0] ?? null);
-    } catch {
-      setMessage("The scan failed. Check that the selected observations are compatible.");
+    } catch (error) {
+      setScanError(error instanceof Error ? error.message : "The comparison failed.");
     } finally {
       setScanning(false);
     }
   };
 
-  const orderedCandidates = useMemo(() => analysis?.candidates ?? [], [analysis]);
-  const chooseContext = (item: Observation) => { setContext(item); setAnalysis(null); setCandidate(null); };
-  const chooseTarget = (item: Observation) => { setTarget(item); setAnalysis(null); setCandidate(null); };
-  const date = (item: Observation | null) => item?.epoch ? new Date(item.epoch).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
-
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: cosmicColors.ink, color: cosmicColors.text }}>
-      <Container maxWidth="md" sx={{ py: { xs: 2, md: 4 } }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-          <Box><Typography sx={{ fontWeight: 800, letterSpacing: "-.02em" }}>Cosmic Timeline</Typography><Typography variant="caption" color="text.secondary">SPHEREx time-domain workspace</Typography></Box>
-          <Chip label={observations.length ? "Cached data" : "Waiting for data"} size="small" icon={<CheckCircle sx={{ fontSize: 15 }} />} sx={{ color: observations.length ? cosmicColors.accent : cosmicColors.warning, border: `1px solid ${observations.length ? cosmicColors.accentStrong : cosmicColors.warning}`, bgcolor: "transparent" }} />
-        </Stack>
+    <Box>
+      {/* Honesty banner — this is an independent entry built on public data. */}
+      <Box sx={{ bgcolor: "#000", color: "#9aa4b2", py: 0.75, fontSize: 13, textAlign: "center", px: 2 }}>
+        Built for the NASA Space Apps Challenge 2026 using public SPHEREx data from NASA/IPAC IRSA ·
+        an independent entry, not an official NASA product
+      </Box>
 
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-          <Paper sx={{ p: { xs: 2, md: 3 }, bgcolor: cosmicColors.panel, border: `1px solid ${cosmicColors.border}` }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Box><Typography sx={{ fontWeight: 800 }}>Observation timeline</Typography><Typography variant="caption" color="text.secondary">Choose the two endpoints for the transition</Typography></Box>
-              <Button size="small" startIcon={<Refresh />} onClick={() => void loadRegion()} disabled={loading} sx={{ color: cosmicColors.accent }}>Reload</Button>
+      {/* Header — near-black chrome */}
+      <Box sx={{ bgcolor: nasa.black, color: "#fff", py: 2, borderBottom: `3px solid ${nasa.red}` }}>
+        <Container maxWidth="lg">
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Stack direction="row" spacing={1.5} alignItems="center">
+              <AppMark />
+              <Box>
+                <Typography variant="h5" sx={{ letterSpacing: "0.04em", lineHeight: 1.1 }}>
+                  COSMIC PREDICT
+                </Typography>
+                <Typography variant="body2" sx={{ color: "#9aa4b2" }}>
+                  SPHEREx Time-Domain Explorer — watch the infrared sky change
+                </Typography>
+              </Box>
             </Stack>
-            <Box sx={{ mt: 2, display: "flex", gap: 1, overflowX: "auto", pb: 1 }}>
-              {observations.map((item) => {
-                const isContext = item.observation_id === context?.observation_id;
-                const isTarget = item.observation_id === target?.observation_id;
-                return <Paper key={item.observation_id} onClick={() => chooseTarget(item)} sx={{ minWidth: 170, p: 1.4, cursor: "pointer", bgcolor: isContext || isTarget ? "rgba(118,229,169,.1)" : cosmicColors.panelRaised, border: `1px solid ${isContext || isTarget ? cosmicColors.accentStrong : cosmicColors.border}` }}>
-                  <Typography sx={{ fontWeight: 700, fontSize: 13 }}>{date(item)}</Typography>
-                  <Typography variant="caption" color="text.secondary" noWrap>{item.observation_id.slice(0, 18)}</Typography>
-                  <Stack direction="row" spacing={.5} sx={{ mt: 1 }}>
-                    <Button size="small" onClick={(event) => { event.stopPropagation(); chooseContext(item); }} sx={{ px: .6, fontSize: 10, color: isContext ? cosmicColors.ink : cosmicColors.muted, bgcolor: isContext ? cosmicColors.accent : "transparent" }}>A</Button>
-                    <Button size="small" onClick={(event) => { event.stopPropagation(); chooseTarget(item); }} sx={{ px: .6, fontSize: 10, color: isTarget ? cosmicColors.ink : cosmicColors.muted, bgcolor: isTarget ? cosmicColors.accent : "transparent" }}>B</Button>
-                  </Stack>
-                </Paper>;
-              })}
-            </Box>
-            {loading && <CircularProgress size={18} sx={{ color: cosmicColors.accent }} />}
-          </Paper>
-        </motion.div>
-
-        <Paper sx={{ mt: 2, p: { xs: 2, md: 3 }, bgcolor: cosmicColors.panel, border: `1px solid ${cosmicColors.border}` }}>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }}>
-            <Typography variant="caption" sx={{ minWidth: 120, color: cosmicColors.muted }}>Transition position</Typography>
-            <Slider value={amount} onChange={(_, value) => setAmount(value as number)} sx={{ color: cosmicColors.violet }} />
-            <Typography sx={{ fontWeight: 800, minWidth: 45, textAlign: "right" }}>{amount}%</Typography>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Chip
+                label={provider ? `Data: ${provider === "supabase" ? "team archive" : "local cache"}` : "Backend offline"}
+                size="small"
+                sx={{ bgcolor: provider ? "rgba(255,255,255,.14)" : nasa.red, color: "#fff" }}
+              />
+              <ModeToggle />
+            </Stack>
           </Stack>
-          <Stack direction="row" justifyContent="space-between"><Typography variant="caption" color="text.secondary">A · {date(context)}</Typography><Typography variant="caption" color="text.secondary">B · {date(target)}</Typography></Stack>
-        </Paper>
+        </Container>
+      </Box>
 
-        {message && <Alert severity="warning" onClose={() => setMessage(null)} sx={{ mt: 2 }}>{message}</Alert>}
+      {/* Public-facing explainer */}
+      <Box
+        sx={(theme) => ({
+          bgcolor: nasa.bgAlt,
+          borderBottom: "1px solid",
+          borderColor: "divider",
+          ...theme.applyStyles("dark", { bgcolor: "#17181b" }),
+        })}
+      >
+        <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
+          <Grid container spacing={4} alignItems="center">
+            <Grid size={{ xs: 12, md: 7 }}>
+              <Typography variant="h3" sx={{ fontSize: { xs: 28, md: 38 }, mb: 1.5 }}>
+                The sky is not still.
+              </Typography>
+              <Typography variant="body1" sx={{ color: "text.secondary", mb: 1.5 }}>
+                Since 2025, NASA&apos;s SPHEREx space telescope has photographed the <em>entire sky</em> every
+                six months in 102 shades of infrared light. Nearby stars drift, asteroids race by, and
+                stars pulse in brightness — but these changes only reveal themselves when you compare
+                pictures taken months apart. Pluto was discovered in exactly this way, by flipping
+                between two photographs until one dot jumped.
+              </Typography>
+              <Typography variant="body1" sx={{ color: "text.secondary" }}>
+                This tool lets anyone replay real SPHEREx observations of any spot on the sky like a
+                short film, flip between dates, and run a statistical change detector. Whatever it
+                flags is a <strong>candidate</strong> for human review — not a confirmed discovery.
+              </Typography>
+            </Grid>
+            <Grid size={{ xs: 12, md: 5 }}>
+              <Stack spacing={1.5}>
+                {[
+                  ["102", "infrared wavelength bands, 0.75–5 µm"],
+                  ["6 months", "to map the complete sky, every time"],
+                  ["1 billion+", "objects imaged — far too many for experts alone"],
+                ].map(([stat, caption]) => (
+                  <Paper key={stat} sx={{ p: 2, display: "flex", alignItems: "baseline", gap: 1.5 }}>
+                    <Typography sx={{ fontWeight: 800, fontSize: 22, color: "primary.main", minWidth: 110 }}>
+                      {stat}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {caption}
+                    </Typography>
+                  </Paper>
+                ))}
+              </Stack>
+            </Grid>
+          </Grid>
+        </Container>
+      </Box>
 
-        <Paper sx={{ mt: 2, p: { xs: 1.5, md: 2 }, bgcolor: cosmicColors.panel, border: `1px solid ${cosmicColors.border}` }}>
-          <SpaceProjection first={context} second={target} amount={amount / 100} candidates={orderedCandidates} />
-          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1.5 }}>Intermediate transition is a synthetic visual blend between the two real endpoint observations. It is not an observation and is excluded from analysis.</Typography>
-        </Paper>
+      <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
+        {/* Steps 1 + 2 side by side on desktop, stacked on mobile */}
+        <Grid container spacing={3} sx={{ mb: 3 }}>
+          <Grid size={{ xs: 12, md: 5 }}>
+            <Paper sx={{ p: { xs: 2, md: 3 }, height: "100%" }}>
+              <StepHeading
+                step="1"
+                title="Choose where to look"
+                lead="Enter sky coordinates (like latitude and longitude, but for the sky), or pick a featured target."
+              />
+              <Stack spacing={1.5}>
+                <Stack direction="row" spacing={1.5}>
+                  <TextField
+                    size="small"
+                    label="Right Ascension (°)"
+                    value={raInput}
+                    onChange={(event) => setRaInput(event.target.value)}
+                    fullWidth
+                  />
+                  <TextField
+                    size="small"
+                    label="Declination (°)"
+                    value={decInput}
+                    onChange={(event) => setDecInput(event.target.value)}
+                    fullWidth
+                  />
+                </Stack>
+                <Button
+                  variant="contained"
+                  startIcon={<Search />}
+                  onClick={() => goTo(Number(raInput), Number(decInput))}
+                >
+                  View this position
+                </Button>
+                {inputError && <Alert severity="error">{inputError}</Alert>}
+              </Stack>
+              <Divider sx={{ my: 2.5 }} />
+              <Typography variant="overline" color="text.secondary">
+                Featured targets (the challenge&apos;s official test objects)
+              </Typography>
+              <Grid container spacing={1.5} sx={{ mt: 0.5 }}>
+                {featuredTargets.map((target) => (
+                  <Grid key={target.name} size={{ xs: 12, sm: 6, md: 12 }}>
+                    <Paper
+                      sx={{
+                        p: 1.5,
+                        height: "100%",
+                        display: "flex",
+                        flexDirection: "column",
+                        borderLeft: "3px solid",
+                        borderLeftColor: "primary.main",
+                      }}
+                    >
+                      <Typography sx={{ fontWeight: 700 }}>{target.name}</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ mb: 1, flex: 1 }}>
+                        {target.type}. {target.note}
+                      </Typography>
+                      {target.ra !== null && target.dec !== null ? (
+                        <Button
+                          size="small"
+                          startIcon={<TravelExplore />}
+                          onClick={() => goTo(target.ra as number, target.dec as number)}
+                          sx={{ alignSelf: "flex-start" }}
+                        >
+                          View this target
+                        </Button>
+                      ) : (
+                        <Chip size="small" label="Coordinates pending verification" sx={{ alignSelf: "flex-start" }} />
+                      )}
+                    </Paper>
+                  </Grid>
+                ))}
+              </Grid>
+            </Paper>
+          </Grid>
 
-        <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mt: 2 }}>
-          <Paper sx={{ flex: 1, p: 2, bgcolor: cosmicColors.panel, border: `1px solid ${cosmicColors.border}` }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center"><Box><Typography sx={{ fontWeight: 800 }}>Change detector</Typography><Typography variant="caption" color="text.secondary">Simplified normalized difference baseline</Typography></Box><Science sx={{ color: cosmicColors.accent }} /></Stack>
-            <Button fullWidth variant="contained" startIcon={scanning ? <CircularProgress size={16} color="inherit" /> : <PlayArrow />} onClick={runScan} disabled={scanning || loading || !context || !target} sx={{ mt: 2 }}>{scanning ? "Scanning..." : "Find anomalies"}</Button>
-            {analysis && <Stack direction="row" spacing={2} sx={{ mt: 1.5 }}><Box><Typography variant="caption" color="text.secondary">Candidates</Typography><Typography variant="h6">{analysis.candidates.length}</Typography></Box><Box><Typography variant="caption" color="text.secondary">Difference</Typography><Typography variant="h6">{analysis.difference_score?.toFixed(3) ?? "—"}</Typography></Box></Stack>}
-          </Paper>
-          <Paper sx={{ flex: 1, p: 2, bgcolor: cosmicColors.panel, border: `1px solid ${cosmicColors.border}` }}><Typography sx={{ fontWeight: 800, mb: 1 }}>Candidate review</Typography><DiscoveryPanel candidate={candidate} /></Paper>
-        </Stack>
+          <Grid size={{ xs: 12, md: 7 }}>
+            <Paper id="player-section" sx={{ p: { xs: 2, md: 3 }, height: "100%", scrollMarginTop: 16 }}>
+              <StepHeading
+                step="2"
+                title="Play the sky through time"
+                lead={`Every available SPHEREx observation of RA ${position.ra}°, Dec ${position.dec}°, in date order.`}
+              />
+              <TimelinePlayer ra={position.ra} dec={position.dec} fov={fov} onFovChange={setFov} onTimeline={onTimeline} />
+            </Paper>
+          </Grid>
+        </Grid>
 
-        {analysis && <Paper sx={{ mt: 2, p: 2, bgcolor: cosmicColors.panel, border: `1px solid ${cosmicColors.border}` }}>
-          <Typography sx={{ fontWeight: 800 }}>Flagged regions</Typography>
-          <Typography variant="caption" color="text.secondary">Candidates are regions for review, not confirmed detections.</Typography>
-          <Divider sx={{ my: 1.5 }} />
-          <Stack spacing={.75}>{orderedCandidates.slice(0, 8).map((item) => <Button key={item.candidate_id} onClick={() => setCandidate(item)} sx={{ justifyContent: "space-between", color: cosmicColors.text, bgcolor: candidate?.candidate_id === item.candidate_id ? "rgba(118,229,169,.1)" : "transparent" }}><span>{item.candidate_id} · {item.area}px</span><span>{item.score.toFixed(3)}</span></Button>)}</Stack>
-        </Paper>}
+        {/* Step 3 — compare */}
+        <Paper sx={{ p: { xs: 2, md: 3 }, mb: 3 }}>
+          <StepHeading
+            step="3"
+            title="Compare two dates"
+            lead="Pick two observations and the tool subtracts them, accounting for measurement noise. Regions that changed significantly get flagged for your review."
+          />
+          {frames.length < 2 ? (
+            <Alert severity="info">
+              This position needs at least two observations from the same detector before dates can be
+              compared. {frames.length === 1 ? "Only one is available so far." : ""}
+            </Alert>
+          ) : (
+            <>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }}>
+                <Select size="small" value={epochA} onChange={(event) => setEpochA(event.target.value)} sx={{ minWidth: 180 }}>
+                  {frames.map((item) => (
+                    <MenuItem key={item.observation_id} value={item.observation_id} sx={{ fontSize: 13 }}>
+                      A — {frameDate(item)}
+                    </MenuItem>
+                  ))}
+                </Select>
+                <Typography variant="body2" color="text.secondary">
+                  versus
+                </Typography>
+                <Select size="small" value={epochB} onChange={(event) => setEpochB(event.target.value)} sx={{ minWidth: 180 }}>
+                  {frames.map((item) => (
+                    <MenuItem key={item.observation_id} value={item.observation_id} sx={{ fontSize: 13 }}>
+                      B — {frameDate(item)}
+                    </MenuItem>
+                  ))}
+                </Select>
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  startIcon={scanning ? <CircularProgress size={16} color="inherit" /> : <Troubleshoot />}
+                  disabled={scanning || !epochA || !epochB || epochA === epochB}
+                  onClick={runScan}
+                >
+                  {scanning ? "Comparing…" : "Find changes"}
+                </Button>
+              </Stack>
+              {epochA === epochB && (
+                <Typography variant="caption" color="error" sx={{ display: "block", mt: 1 }}>
+                  Choose two different dates.
+                </Typography>
+              )}
+              {scanError && (
+                <Alert severity="warning" sx={{ mt: 2 }} onClose={() => setScanError(null)}>
+                  {scanError}
+                </Alert>
+              )}
 
-        <Paper sx={{ mt: 2, p: 2, bgcolor: cosmicColors.panel, border: `1px solid ${cosmicColors.border}` }}>
-          <Typography sx={{ fontWeight: 800, mb: 1 }}>Region</Typography>
-          <Stack direction="row" spacing={1}><TextField size="small" label="RA" value={ra} onChange={(event) => setRa(event.target.value)} /><TextField size="small" label="Dec" value={dec} onChange={(event) => setDec(event.target.value)} /><Button onClick={() => void loadRegion()} startIcon={<ExpandMore />} sx={{ color: cosmicColors.accent }}>Load</Button></Stack>
-        </Paper>
+              {analysis && (
+                <Box sx={{ mt: 3 }}>
+                  <Grid container spacing={2}>
+                    {[
+                      { label: `A · ${frameDate(frameA)}`, url: frameA?.cutout_url ?? null },
+                      { label: `B · ${frameDate(frameB)}`, url: frameB?.cutout_url ?? null },
+                    ].map((item) => (
+                      <Grid key={item.label} size={{ xs: 12, sm: 4 }}>
+                        <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                          {item.label}
+                        </Typography>
+                        <Box sx={{ border: "1px solid", borderColor: "divider", bgcolor: "#000" }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={resolveAssetUrl(item.url) ?? undefined}
+                            alt={item.label}
+                            style={{ width: "100%", display: "block", aspectRatio: "1" }}
+                          />
+                        </Box>
+                      </Grid>
+                    ))}
+                    <Grid size={{ xs: 12, sm: 4 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                        Difference — red: brighter in A · blue: brighter in B
+                      </Typography>
+                      <Box sx={{ position: "relative", border: "1px solid", borderColor: "divider", bgcolor: "#000" }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={resolveAssetUrl(analysis.difference_image_url) ?? undefined}
+                          alt="Difference between the two selected observations"
+                          style={{ width: "100%", display: "block", aspectRatio: "1" }}
+                        />
+                        {analysis.candidates.map((item) => {
+                          const selected = candidate?.candidate_id === item.candidate_id;
+                          return (
+                            <Box
+                              key={item.candidate_id}
+                              onClick={() => setCandidate(item)}
+                              sx={{
+                                position: "absolute",
+                                left: `${(item.column / CUTOUT_SIZE) * 100}%`,
+                                top: `${(item.row / CUTOUT_SIZE) * 100}%`,
+                                width: `${Math.max((item.width / CUTOUT_SIZE) * 100, 4)}%`,
+                                height: `${Math.max((item.height / CUTOUT_SIZE) * 100, 4)}%`,
+                                border: selected ? "3px solid #00e5ff" : "1.5px solid rgba(255,255,255,.55)",
+                                boxShadow: selected
+                                  ? "0 0 0 2px rgba(0,229,255,.45), 0 0 16px 3px rgba(0,229,255,.65)"
+                                  : "none",
+                                zIndex: selected ? 2 : 1,
+                                cursor: "pointer",
+                                borderRadius: "3px",
+                                transition: "box-shadow .15s, border .15s",
+                              }}
+                            />
+                          );
+                        })}
+                      </Box>
+                      {candidate && (
+                        <Typography variant="caption" sx={{ color: "#00bcd4", fontWeight: 700 }}>
+                          ◉ {candidate.candidate_id} highlighted
+                        </Typography>
+                      )}
+                    </Grid>
+                  </Grid>
 
-        <Paper sx={{ mt: 2, p: 2, bgcolor: cosmicColors.panel, border: `1px solid ${cosmicColors.border}` }}>
-          <Typography sx={{ fontWeight: 800 }}>Featured science targets</Typography>
-          <Typography variant="caption" color="text.secondary">
-            Target context from the project brief. A name is not treated as a detection, and only verified coordinates can load a region.
-          </Typography>
-          <Stack spacing={1} sx={{ mt: 1.5 }}>
-            {featuredTargets.map((target) => {
-              const targetRa = target.ra;
-              const targetDec = target.dec;
-              return <Stack key={target.name} direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1} sx={{ p: 1, border: `1px solid ${cosmicColors.border}`, borderRadius: 1 }}>
-                <Box>
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>{target.name}</Typography>
-                  <Typography variant="caption" color="text.secondary">{target.type} · {target.note}</Typography>
+                  <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <Typography variant="overline" color="text.secondary">
+                        Flagged regions ({analysis.candidates.length})
+                      </Typography>
+                      {analysis.candidates.length === 0 ? (
+                        <Typography variant="body2" color="text.secondary">
+                          No significant changes between these two dates — the sky held still here, at
+                          least above the noise level.
+                        </Typography>
+                      ) : (
+                        <Stack spacing={0.5}>
+                          {analysis.candidates.slice(0, 8).map((item) => {
+                            const selected = candidate?.candidate_id === item.candidate_id;
+                            return (
+                              <Button
+                                key={item.candidate_id}
+                                onClick={() => setCandidate(item)}
+                                variant={selected ? "contained" : "outlined"}
+                                sx={{
+                                  justifyContent: "space-between",
+                                  borderColor: "divider",
+                                  ...(selected ? {} : { color: "text.primary" }),
+                                }}
+                              >
+                                <span>{item.candidate_id}</span>
+                                <span style={{ opacity: 0.75 }}>{item.score.toFixed(1)}× noise</span>
+                              </Button>
+                            );
+                          })}
+                        </Stack>
+                      )}
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <Paper
+                        sx={(theme) => ({
+                          p: 1.5,
+                          bgcolor: nasa.bgAlt,
+                          ...theme.applyStyles("dark", { bgcolor: "#202126" }),
+                        })}
+                      >
+                        <DiscoveryPanel candidate={candidate} pixelScaleArcsec={pixelScale} />
+                      </Paper>
+                    </Grid>
+                  </Grid>
+
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 2 }}>
+                    {analysis.caveats.join(" ")}
+                  </Typography>
                 </Box>
-                {targetRa !== null && targetDec !== null ? (
-                  <Button size="small" onClick={() => { setRa(String(targetRa)); setDec(String(targetDec)); void loadRegion({ ra: targetRa, dec: targetDec }); }} sx={{ color: cosmicColors.accent, alignSelf: { sm: "center" } }}>
-                    Explore target
-                  </Button>
-                ) : (
-                  <Chip size="small" label="Awaiting verified coordinates" sx={{ color: cosmicColors.muted, alignSelf: { sm: "center" } }} />
-                )}
-              </Stack>;
-            })}
+              )}
+            </>
+          )}
+        </Paper>
+
+        {/* Light curve — brightness vs. time (also carries wavelength info by color) */}
+        <Paper sx={{ p: { xs: 2, md: 3 }, mb: 3 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Box>
+              <Typography variant="h6">Brightness over time — at the crosshair</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Measures only the small circled spot at the center of the player (your entered RA/Dec,
+                a ~1-arcminute box — not the whole image). One dot per observation date. A steady star
+                traces a flat line; a variable star rises and falls. Dot color = infrared wavelength.
+              </Typography>
+            </Box>
+            <Button endIcon={showSpectrum ? <ExpandLess /> : <ExpandMore />} onClick={() => setShowSpectrum((value) => !value)}>
+              {showSpectrum ? "Hide" : "Show"}
+            </Button>
           </Stack>
+          {showSpectrum && (
+            <Box sx={{ mt: 2 }}>
+              <LightCurvePanel ra={position.ra} dec={position.dec} />
+            </Box>
+          )}
+        </Paper>
+
+        {/* Optional 3-D view */}
+        <Paper sx={{ p: { xs: 2, md: 3 }, mb: 3 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Box>
+              <Typography variant="h6">Experimental: 3-D brightness relief</Typography>
+              <Typography variant="body2" color="text.secondary">
+                The two full detector images as a landscape where height is brightness — a visual aid,
+                not a measurement. The slider shows a synthetic blend, never a real observation.
+              </Typography>
+            </Box>
+            <Button endIcon={show3d ? <ExpandLess /> : <ExpandMore />} onClick={() => setShow3d((value) => !value)}>
+              {show3d ? "Hide" : "Show"}
+            </Button>
+          </Stack>
+          {show3d && frameA && frameB && (
+            <Box sx={{ mt: 2 }}>
+              <SpaceProjection
+                first={toObservation(frameA)}
+                second={toObservation(frameB)}
+                amount={morph / 100}
+                candidates={[]}
+              />
+              <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 1 }}>
+                <Typography variant="caption" sx={{ minWidth: 110 }} color="text.secondary">
+                  Synthetic blend A→B
+                </Typography>
+                <Slider size="small" value={morph} onChange={(_, value) => setMorph(value as number)} sx={{ maxWidth: 320 }} />
+              </Stack>
+            </Box>
+          )}
+          {show3d && (!frameA || !frameB) && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              Load a position with at least two observations first.
+            </Alert>
+          )}
         </Paper>
       </Container>
+
+      {/* Footer — near-black chrome */}
+      <Box sx={{ bgcolor: nasa.black, color: "#9aa4b2", py: 4, mt: 2 }}>
+        <Container maxWidth="lg">
+          <Grid container spacing={3}>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Typography sx={{ color: "#fff", fontWeight: 700, mb: 1 }}>Data & provenance</Typography>
+              <Typography variant="body2">
+                All images are Level-2 calibrated SPHEREx observations retrieved from the NASA/IPAC
+                Infrared Science Archive (IRSA). Every displayed frame keeps a link to its archive
+                source. Difference images and flagged regions are derived products; synthetic blends
+                are labeled and never analyzed.
+              </Typography>
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Typography sx={{ color: "#fff", fontWeight: 700, mb: 1 }}>Glossary</Typography>
+              <Typography variant="body2">
+                <strong>Epoch</strong> — the date of one observation · <strong>Detector band</strong> —
+                one of six infrared cameras · <strong>Candidate</strong> — an unconfirmed region where
+                brightness changed · <strong>Blink</strong> — flipping between two dates to spot motion
+              </Typography>
+            </Grid>
+          </Grid>
+          <Divider sx={{ my: 2, borderColor: "rgba(255,255,255,.15)" }} />
+          <Typography variant="caption">
+            COSMIC PREDICT · NASA Space Apps Challenge 2026 entry · independent project, not affiliated
+            with or endorsed by NASA · SPHEREx data courtesy NASA/JPL-Caltech/IPAC-IRSA
+          </Typography>
+        </Container>
+      </Box>
     </Box>
   );
 }

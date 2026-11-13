@@ -287,12 +287,21 @@ export default function SpaceProjection({ first, second, amount, candidates }: P
     terrainRef.current.rotation.x = orbitRef.current.x;
     terrainRef.current.rotation.y = orbitRef.current.y;
   };
-  const zoom = (event: React.WheelEvent) => {
-    const camera = cameraRef.current;
-    if (!camera) return;
-    camera.position.z = Math.max(2.15, Math.min(7, camera.position.z + event.deltaY * 0.0025));
-    camera.lookAt(0, 0, 0);
-  };
+  // Native non-passive listener: React's onWheel cannot preventDefault, so the
+  // page would scroll while zooming. This keeps the wheel inside the 3-D view.
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const camera = cameraRef.current;
+      if (!camera) return;
+      camera.position.z = Math.max(2.15, Math.min(7, camera.position.z + event.deltaY * 0.0025));
+      camera.lookAt(0, 0, 0);
+    };
+    host.addEventListener("wheel", onWheel, { passive: false });
+    return () => host.removeEventListener("wheel", onWheel);
+  }, []);
 
   return (
     <Box>
@@ -304,7 +313,6 @@ export default function SpaceProjection({ first, second, amount, candidates }: P
         onPointerCancel={() => setDragging(false)}
         onPointerLeave={() => setDragging(false)}
         onContextMenu={(event) => event.preventDefault()}
-        onWheel={zoom}
         sx={{
           height: { xs: 300, md: 470 },
           border: `1px solid ${cosmicColors.border}`,
@@ -317,8 +325,8 @@ export default function SpaceProjection({ first, second, amount, candidates }: P
         }}
       >
         <Stack direction="row" spacing={1} sx={{ position: "absolute", top: 14, left: 14, pointerEvents: "none", zIndex: 1 }}>
-          <Chip label="LUMINANCE TERRAIN" size="small" sx={{ bgcolor: "rgba(5,7,8,.82)", color: cosmicColors.accent, border: `1px solid ${cosmicColors.accentStrong}` }} />
-          <Chip label={`${candidates.length} ANOMALY BEACONS`} size="small" sx={{ bgcolor: "rgba(5,7,8,.82)", color: candidates.length ? cosmicColors.violet : cosmicColors.muted }} />
+          <Chip label="Brightness relief (height = brightness)" size="small" sx={{ bgcolor: "rgba(5,7,8,.82)", color: cosmicColors.accent, border: `1px solid ${cosmicColors.accentStrong}` }} />
+          {candidates.length > 0 && <Chip label={`${candidates.length} flagged regions`} size="small" sx={{ bgcolor: "rgba(5,7,8,.82)", color: cosmicColors.violet }} />}
         </Stack>
         <Typography variant="caption" sx={{ position: "absolute", bottom: 12, left: 14, color: cosmicColors.muted, pointerEvents: "none", zIndex: 1 }}>
           Drag to orbit · Shift/right-drag to pan · wheel to zoom · scrub above to morph epochs
