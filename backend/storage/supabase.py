@@ -7,6 +7,7 @@ can fall back to the local filesystem cache.
 
 from __future__ import annotations
 
+import base64
 import json
 import ssl
 import urllib.error
@@ -17,6 +18,11 @@ from typing import Any
 from backend import config
 
 _USER_AGENT = "cosmic-predict-supabase/0.1"
+
+# Supabase's standard upload endpoint rejects objects larger than ~50 MB; use
+# the TUS resumable endpoint above that threshold.
+_STANDARD_UPLOAD_LIMIT = 50 * 1024 * 1024
+_TUS_CHUNK_SIZE = 6 * 1024 * 1024
 
 
 class SupabaseError(RuntimeError):
@@ -105,7 +111,70 @@ class SupabaseClient:
 
     # --- Storage (file objects) ---
 
+    def _tus_upload(self, object_path: str, data: bytes, content_type: str) -> None:
+        """Upload via the TUS resumable endpoint (for files over ~50 MB)."""
+
+        def b64(value: str) -> str:
+            return base64.b64encode(value.encode("utf-8")).decode("ascii")
+
+        metadata = (
+            f"bucketName {b64(self.bucket)},"
+            f"objectName {b64(object_path)},"
+            f"contentType {b64(content_type)}"
+        )
+        create_request = urllib.request.Request(
+            self.url + "/storage/v1/upload/resumable",
+            method="POST",
+            headers=self._headers(
+                {
+                    "x-upsert": "true",
+                    "Tus-Resumable": "1.0.0",
+                    "Upload-Length": str(len(data)),
+                    "Upload-Metadata": metadata,
+                }
+            ),
+        )
+        try:
+            with urllib.request.urlopen(
+                create_request, timeout=60.0, context=ssl.create_default_context()
+            ) as response:
+                location = response.headers.get("Location")
+        except (urllib.error.HTTPError, urllib.error.URLError) as error:
+            raise SupabaseError(f"resumable upload create failed: {error}") from error
+
+        if not location:
+            raise SupabaseError("resumable upload create returned no Location header")
+        if not location.startswith("http"):
+            location = self.url + location
+
+        offset = 0
+        while offset < len(data):
+            chunk = data[offset : offset + _TUS_CHUNK_SIZE]
+            patch_request = urllib.request.Request(
+                location,
+                data=chunk,
+                method="PATCH",
+                headers=self._headers(
+                    {
+                        "Tus-Resumable": "1.0.0",
+                        "Content-Type": "application/offset+octet-stream",
+                        "Upload-Offset": str(offset),
+                    }
+                ),
+            )
+            try:
+                with urllib.request.urlopen(
+                    patch_request, timeout=120.0, context=ssl.create_default_context()
+                ):
+                    pass
+            except (urllib.error.HTTPError, urllib.error.URLError) as error:
+                raise SupabaseError(f"resumable upload chunk failed at offset {offset}: {error}") from error
+            offset += len(chunk)
+
     def upload_object(self, object_path: str, data: bytes, content_type: str = "application/octet-stream") -> None:
+        if len(data) > _STANDARD_UPLOAD_LIMIT:
+            self._tus_upload(object_path, data, content_type)
+            return
         encoded = urllib.parse.quote(object_path, safe="/")
         self._request(
             f"/storage/v1/object/{self.bucket}/{encoded}",

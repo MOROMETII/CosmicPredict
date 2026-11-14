@@ -20,7 +20,6 @@ from backend import storage
 from backend.ai.inference import JEPAInference
 from backend.api.schemas import AnalyzeRequest, AnalyzeResponse, EpochsResponse, ObservationResponse
 from backend.astronomy.calibration import robust_normalize
-from backend.astronomy.fits_loader import load_fits_observation
 
 ROOT = Path(__file__).resolve().parents[2]
 CHECKPOINT = ROOT / "models" / "checkpoints" / "jepa.pt"
@@ -71,8 +70,7 @@ def _catalog() -> dict[str, ObservationResponse]:
 def _load_patch(observation_id: str, row: int, column: int, size: int) -> np.ndarray:
     if observation_id not in _catalog():
         raise HTTPException(status_code=404, detail=f"unknown observation: {observation_id}")
-    path = storage.resolve_asset_path(observation_id)
-    calibrated = robust_normalize(load_fits_observation(path))
+    calibrated = robust_normalize(storage.load_observation(observation_id))
     end_row, end_column = row + size, column + size
     if end_row > calibrated.image.shape[0] or end_column > calibrated.image.shape[1]:
         raise HTTPException(status_code=422, detail="requested patch exceeds image bounds")
@@ -107,7 +105,10 @@ def _png_response(image: Image.Image) -> Response:
 
 
 def _checkpoint_path() -> Path:
-    return Path(os.environ.get("JEPA_CHECKPOINT", CHECKPOINT))
+    checkpoint = Path(os.environ.get("JEPA_CHECKPOINT", CHECKPOINT))
+    if not checkpoint.is_absolute():
+        checkpoint = ROOT / checkpoint
+    return checkpoint
 
 
 def _angular_separation(ra_a: float, dec_a: float, ra_b: float, dec_b: float) -> float:
@@ -256,8 +257,7 @@ def image_preview(observation_id: str) -> Response:
     if observation_id not in _catalog():
         raise HTTPException(status_code=404, detail=f"unknown observation: {observation_id}")
     try:
-        path = storage.resolve_asset_path(observation_id)
-        observation = load_fits_observation(path)
+        observation = storage.load_observation(observation_id)
         png = _false_color(observation.image)
     except (OSError, ValueError, TypeError) as error:
         raise HTTPException(status_code=500, detail=f"could not render observation preview: {error}") from error
