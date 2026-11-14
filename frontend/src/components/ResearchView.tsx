@@ -14,6 +14,11 @@ import {
   Paper,
   Select,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   TextField,
   Tooltip,
   Typography,
@@ -60,6 +65,20 @@ function csv(rows: (string | number | null | undefined)[][]): string {
   return rows
     .map((row) => row.map((cell) => (cell == null ? "" : `"${String(cell).replace(/"/g, '""')}"`)).join(","))
     .join("\n");
+}
+
+const MONO = "var(--font-nasa-mono), 'DM Mono', monospace";
+
+/** One numeric readout in the analysis summary strip. */
+function Readout({ label, value }: { label: string; value: string }) {
+  return (
+    <Box sx={{ px: 1.5, py: 0.75, border: "1px solid", borderColor: "divider", borderRadius: "2px", minWidth: 96 }}>
+      <Typography sx={{ fontSize: 10, letterSpacing: "0.08em", color: "text.secondary", textTransform: "uppercase" }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: 15, fontWeight: 500 }}>{value}</Typography>
+    </Box>
+  );
 }
 
 function Section({ title, number, lead, children }: { title: string; number: string; lead: string; children: React.ReactNode }) {
@@ -151,6 +170,9 @@ export default function ResearchView() {
       setPosition({ ra, dec });
       setRaInput(String(ra));
       setDecInput(String(dec));
+      // The analysis center must follow the URL position too, or Find changes
+      // would silently analyze the default coordinates.
+      setActiveCenter((center) => ({ ...center, ra, dec }));
     }
   }, []);
 
@@ -397,6 +419,38 @@ export default function ResearchView() {
               lead="Play the epochs in date order, blink the first against the last, and run change detection to flag objects whose position changed."
             >
               <TimelinePlayer ra={position.ra} dec={position.dec} fov={fov} onFovChange={(next) => { setFov(next); setActiveCenter((c) => ({ ...c, fov: next })); setSelRect(null); }} onTimeline={onTimeline} />
+
+              {frames.length > 0 && (
+                <Box sx={{ mt: 2.5 }}>
+                  <Typography variant="overline" color="text.secondary">
+                    Observation log · {frames.length} epochs
+                  </Typography>
+                  <Box sx={{ overflowX: "auto" }}>
+                    <Table size="small" sx={{ "& td, & th": { fontFamily: MONO, fontSize: 12, whiteSpace: "nowrap", py: 0.5 } }}>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>UTC date</TableCell>
+                          <TableCell>Band</TableCell>
+                          <TableCell align="right">λ (µm)</TableCell>
+                          <TableCell align="right">Coverage</TableCell>
+                          <TableCell>Source</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {frames.map((frame) => (
+                          <TableRow key={frame.observation_id} hover>
+                            <TableCell>{frame.epoch ? frame.epoch.slice(0, 10) : "—"}</TableCell>
+                            <TableCell>D{frame.band ?? "?"}</TableCell>
+                            <TableCell align="right">{frame.wavelength?.toFixed(3) ?? "—"}</TableCell>
+                            <TableCell align="right">{frame.coverage != null ? `${Math.round(frame.coverage * 100)}%` : "—"}</TableCell>
+                            <TableCell>{frame.source}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </Box>
+                </Box>
+              )}
             </Section>
           </Grid>
 
@@ -545,6 +599,19 @@ export default function ResearchView() {
 
                   {analysis && (
                     <Box sx={{ mt: 1.5 }}>
+                      {/* Analysis summary readouts */}
+                      <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1, mb: 1.5 }}>
+                        <Readout label="mean |σ|" value={analysis.difference_score != null ? analysis.difference_score.toFixed(2) : "—"} />
+                        <Readout label="threshold" value="5.0 σ" />
+                        <Readout label="candidates" value={String(analysis.candidates.length)} />
+                        <Readout label="grid" value={`${CUTOUT_SIZE}² TAN`} />
+                        <Readout label="pixel scale" value={`${((activeCenter.fov * 60) / CUTOUT_SIZE).toFixed(2)}″/px`} />
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5, fontFamily: MONO }}>
+                        Pipeline: WCS reprojection → variance-normalized difference → 5σ connected
+                        components → Gaia DR3 cross-match
+                      </Typography>
+
                       <Typography variant="overline" color="text.secondary">
                         Flagged regions ({analysis.candidates.length})
                       </Typography>
@@ -553,19 +620,51 @@ export default function ResearchView() {
                           No significant change between these two epochs.
                         </Typography>
                       ) : (
-                        <Stack spacing={0.5} sx={{ mt: 0.5 }}>
-                          {analysis.candidates.slice(0, 8).map((item) => (
-                            <Button
-                              key={item.candidate_id}
-                              onClick={() => setCandidate(item)}
-                              variant={candidate?.candidate_id === item.candidate_id ? "contained" : "outlined"}
-                              sx={{ justifyContent: "space-between", borderColor: "divider", color: "text.primary" }}
-                            >
-                              <span>{item.candidate_id}</span>
-                              <span style={{ opacity: 0.75 }}>{item.score.toFixed(1)}× noise</span>
-                            </Button>
-                          ))}
-                        </Stack>
+                        <Box sx={{ overflowX: "auto" }}>
+                          <Table
+                            size="small"
+                            sx={{ "& td, & th": { fontFamily: MONO, fontSize: 12, whiteSpace: "nowrap", py: 0.5 } }}
+                          >
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>ID</TableCell>
+                                <TableCell align="right">σ</TableCell>
+                                <TableCell align="right">Area (px)</TableCell>
+                                <TableCell align="right">RA (°)</TableCell>
+                                <TableCell align="right">Dec (°)</TableCell>
+                                <TableCell>Catalog</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {analysis.candidates.slice(0, 12).map((item) => {
+                                const selected = candidate?.candidate_id === item.candidate_id;
+                                return (
+                                  <TableRow
+                                    key={item.candidate_id}
+                                    hover
+                                    selected={selected}
+                                    onClick={() => setCandidate(item)}
+                                    sx={{ cursor: "pointer" }}
+                                  >
+                                    <TableCell>{item.candidate_id}</TableCell>
+                                    <TableCell align="right">{item.score.toFixed(1)}</TableCell>
+                                    <TableCell align="right">{item.area}</TableCell>
+                                    <TableCell align="right">{item.ra?.toFixed(5) ?? "—"}</TableCell>
+                                    <TableCell align="right">{item.dec?.toFixed(5) ?? "—"}</TableCell>
+                                    <TableCell>
+                                      {item.gaia_checked ? (item.gaia_match ? "known star" : "uncatalogued") : "unchecked"}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </Box>
+                      )}
+                      {candidate?.interpretation && (
+                        <Alert severity={candidate.gaia_match ? "info" : "warning"} sx={{ mt: 1.5, fontSize: 12 }}>
+                          <strong>{candidate.candidate_id}:</strong> {candidate.interpretation}
+                        </Alert>
                       )}
                       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1.5 }}>
                         {analysis.caveats.join(" ")}

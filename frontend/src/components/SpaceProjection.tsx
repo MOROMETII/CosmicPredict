@@ -47,7 +47,8 @@ export default function SpaceProjection({ first, second, amount, candidates }: P
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#070a10");
-    scene.fog = new THREE.FogExp2("#070a10", 0.11);
+    // Light fog only — heavy fog washed the stars out at field distance.
+    scene.fog = new THREE.FogExp2("#070a10", 0.04);
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
@@ -65,17 +66,34 @@ export default function SpaceProjection({ first, second, amount, candidates }: P
     host.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
+    // Soft circular glow sprite so stars render as luminous discs, not faint
+    // square pixels.
+    const spriteCanvas = document.createElement("canvas");
+    spriteCanvas.width = spriteCanvas.height = 64;
+    const spriteContext = spriteCanvas.getContext("2d");
+    let spriteTexture: THREE.CanvasTexture | null = null;
+    if (spriteContext) {
+      const gradient = spriteContext.createRadialGradient(32, 32, 0, 32, 32, 32);
+      gradient.addColorStop(0, "rgba(255,255,255,1)");
+      gradient.addColorStop(0.3, "rgba(255,255,255,.7)");
+      gradient.addColorStop(1, "rgba(255,255,255,0)");
+      spriteContext.fillStyle = gradient;
+      spriteContext.fillRect(0, 0, 64, 64);
+      spriteTexture = new THREE.CanvasTexture(spriteCanvas);
+    }
+
     // Point cloud (positions/colors filled from real source detection).
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(0), 3));
     geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(0), 3));
 
     const material = new THREE.PointsMaterial({
-      size: 0.03,
+      size: 0.14,
+      map: spriteTexture ?? undefined,
       vertexColors: true,
       sizeAttenuation: true,
       transparent: true,
-      opacity: 0.9,
+      opacity: 1,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     });
@@ -142,6 +160,7 @@ export default function SpaceProjection({ first, second, amount, candidates }: P
       window.cancelAnimationFrame(animationFrame);
       geometry.dispose();
       material.dispose();
+      spriteTexture?.dispose();
       anomalyGroup.traverse((object) => {
         if (object instanceof THREE.Mesh || object instanceof THREE.Line) {
           object.geometry.dispose();
@@ -236,9 +255,11 @@ export default function SpaceProjection({ first, second, amount, candidates }: P
         positions[i * 3] = (fx - 0.5) * FIELD_RADIUS;
         positions[i * 3 + 1] = (0.5 - fy) * FIELD_RADIUS * 0.62;
         positions[i * 3 + 2] = depth;
-        colors[i * 3] = data[idx] / 255;
-        colors[i * 3 + 1] = data[idx + 1] / 255;
-        colors[i * 3 + 2] = data[idx + 2] / 255;
+        // Lift the stretched pixel values so faint real sources stay visible
+        // while the hue (the wavelength tint) is preserved.
+        colors[i * 3] = Math.min(1, Math.pow(data[idx] / 255, 0.6) * 1.35);
+        colors[i * 3 + 1] = Math.min(1, Math.pow(data[idx + 1] / 255, 0.6) * 1.35);
+        colors[i * 3 + 2] = Math.min(1, Math.pow(data[idx + 2] / 255, 0.6) * 1.35);
       }
 
       const geometry = points.geometry as THREE.BufferGeometry;

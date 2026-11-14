@@ -94,7 +94,7 @@ def _read_ledger() -> dict[str, Any]:
 def _write_ledger(ledger: dict[str, Any]) -> None:
     path = _ledger_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({**_ledger, "version": _LEDGER_VERSION}, indent=1), encoding="utf-8")
+    path.write_text(json.dumps({**ledger, "version": _LEDGER_VERSION}, indent=1), encoding="utf-8")
 
 
 def _open_with_retry(request: urllib.request.Request, *, timeout: float) -> Any:
