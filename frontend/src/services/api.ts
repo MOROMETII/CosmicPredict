@@ -287,6 +287,7 @@ export type SurveyItem = {
   gifs: number;
   people: number;
   saves: number;
+  preview_url: string | null;
 };
 
 export type Survey = {
