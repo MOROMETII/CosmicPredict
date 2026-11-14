@@ -1,0 +1,39 @@
+{
+ "regions": {
+  "83.82,-5.4": {
+   "fetched_at": "2026-11-13T07:40:51.774663+00:00",
+   "frames": 4,
+   "files": [
+    "live_83p8200_m5p4000_level2_2025W36_2B_0711_2D4_spx_l2bv272026234.fits",
+    "live_83p8200_m5p4000_level2_2026W11_1A_0561_3D4_spx_l2bv272026232.fits",
+    "live_83p8200_m5p4000_level2_2026W37_1A_0316_2D4_spx_l2bv272026255.fits",
+    "live_83p8200_m5p4000_level2_2026W40_2A_0581_1D4_spx_l2bv272026285.fits"
+   ],
+   "size_arcmin": 24.0
+  },
+  "248.16,66.76": {
+   "fetched_at": "2026-11-13T07:46:28.001040+00:00",
+   "frames": 7,
+   "files": [
+    "live_248p1600_66p7600_level2_2025W21_1B_0329_2D6_spx_l2bv272026199.fits",
+    "live_248p1600_66p7600_level2_2025W23_1C_0021_1D6_spx_l2bv272026200.fits",
+    "live_248p1600_66p7600_level2_2026W01_1A_0257_3D6_spx_l2bv272026211.fits",
+    "live_248p1600_66p7600_level2_2026W01_2A_0426_1D6_spx_l2bv272026212.fits",
+    "live_248p1600_66p7600_level2_2026W17_1B_0434_4D6_spx_l2bv272026242.fits",
+    "live_248p1600_66p7600_level2_2026W21_2A_0325_3D6_spx_l2bv272026268.fits",
+    "live_248p1600_66p7600_level2_2026W24_2B_0242_4D6_spx_l2bv272026272.fits"
+   ],
+   "size_arcmin": 24.0
+  },
+  "76.96,30.4": {
+   "fetched_at": "2026-11-14T09:24:57.239268+00:00",
+   "frames": 3,
+   "files": [
+    "live_76p9600_30p4000_level2_2025W38_2C_0023_3D3_spx_l2bv272026237.fits",
+    "live_76p9600_30p4000_level2_2026W10_1A_0120_1D3_spx_l2bv272026229.fits",
+    "live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261.fits"
+   ],
+   "size_arcmin": 24.0
+  }
+ }
+}
