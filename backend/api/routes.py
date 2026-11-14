@@ -559,6 +559,32 @@ _ALIGNED_CAVEATS = [
 ]
 
 
+@router.get("/patch_center")
+def patch_center(
+    ra: float = Query(..., ge=0, lt=360),
+    dec: float = Query(..., ge=-90, le=90),
+    fov: float = Query(..., ge=0.5, le=240.0),
+    size: int = Query(default=256, ge=8, le=cutout_module.MAX_CUTOUT_SIZE),
+    x0: float = Query(..., ge=0, le=1),
+    y0: float = Query(..., ge=0, le=1),
+    x1: float = Query(..., ge=0, le=1),
+    y1: float = Query(..., ge=0, le=1),
+) -> dict[str, float]:
+    """Map a fractional image rectangle to the sky center + FOV of that patch.
+
+    Takes a selection on the aligned cutout grid (fractions 0..1 of the image
+    width/height) and returns the (ra, dec, fov_arcmin) that re-centers a new
+    cutout on exactly that sub-region, so the frontend can "zoom in" on a patch
+    without doing any sky math itself.
+    """
+    if not (0 <= x0 < x1 <= 1) or not (0 <= y0 < y1 <= 1):
+        raise HTTPException(status_code=422, detail="selection must satisfy 0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1")
+    grid = cutout_module.aligned_grid_wcs(ra, dec, fov, size)
+    center_sky = grid.wcs_pix2world([[((x0 + x1) / 2) * size, ((y0 + y1) / 2) * size]], 0)[0]
+    new_fov = fov * max(x1 - x0, y1 - y0)
+    return {"ra": float(center_sky[0] % 360.0), "dec": float(center_sky[1]), "fov_arcmin": float(new_fov)}
+
+
 @router.get("/diff/aligned")
 def aligned_difference_preview(
     context_epoch: str,
