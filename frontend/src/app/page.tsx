@@ -282,33 +282,6 @@ export default function Home() {
               </Box>
             </Stack>
             <Stack direction="row" spacing={1} alignItems="center">
-              <Tooltip title="Research view — motion and variability analysis">
-                <Button
-                  component={NextLink}
-                  href="/detailed"
-                  sx={{ color: "text.primary", display: { xs: "none", md: "inline-flex" } }}
-                >
-                  Research
-                </Button>
-              </Tooltip>
-              <Tooltip title="Engagement leaderboard — most-interacted sky regions">
-                <Button
-                  component={NextLink}
-                  href="/leaderboard"
-                  sx={{ color: "text.primary", display: { xs: "none", md: "inline-flex" } }}
-                >
-                  Leaderboard
-                </Button>
-              </Tooltip>
-              <Tooltip title="Sky map — every observation pinned on the sky">
-                <Button
-                  component={NextLink}
-                  href="/skymap"
-                  sx={{ color: "text.primary", display: { xs: "none", md: "inline-flex" } }}
-                >
-                  Sky map
-                </Button>
-              </Tooltip>
               <Tooltip title="Sky Scroll — swipe through real sky timelapses and flag anything suspicious">
                 <IconButton
                   component={NextLink}
@@ -327,6 +300,24 @@ export default function Home() {
                   sx={{ color: "text.primary", display: { xs: "none", sm: "inline-flex" } }}
                 >
                   Sky Scroll
+                </Button>
+              </Tooltip>
+              <Tooltip title="Sky map — every observation pinned on the sky">
+                <Button
+                  component={NextLink}
+                  href="/skymap"
+                  sx={{ color: "text.primary", display: { xs: "none", md: "inline-flex" } }}
+                >
+                  Sky map
+                </Button>
+              </Tooltip>
+              <Tooltip title="Research view — motion and variability analysis">
+                <Button
+                  component={NextLink}
+                  href="/detailed"
+                  sx={{ color: "text.primary", display: { xs: "none", md: "inline-flex" } }}
+                >
+                  Research
                 </Button>
               </Tooltip>
               <Tooltip title="My flags — everything you marked for review">
