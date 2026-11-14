@@ -395,6 +395,7 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
             direction="row"
             spacing={1}
             alignItems="center"
+            justifyContent="center"
             sx={{ mt: 1.5, maxWidth: 640, mx: "auto", flexWrap: "wrap", rowGap: 1 }}
           >
             <Tooltip title="Previous date">
@@ -403,7 +404,7 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
               </IconButton>
             </Tooltip>
             <Tooltip title={playing ? "Pause" : "Play through time"}>
-              <span>
+              <span style={{ display: "inline-flex", flexShrink: 0 }}>
                 <IconButton
                   onClick={() => setPlaying((value) => !value)}
                   disabled={!canPlay}
@@ -472,7 +473,11 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
                 </MenuItem>
               ))}
             </Select>
-            {/* Wraps onto its own full-width row when the controls fill the line. */}
+          </Stack>
+
+          {/* Frame scrubber always gets its own full-width row so the transport
+              controls never overflow horizontally on narrow screens. */}
+          <Box sx={{ mt: 1.5, maxWidth: 640, mx: "auto" }}>
             <Slider
               size="small"
               min={0}
@@ -482,9 +487,8 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
                 setPlaying(false);
                 setFrame(value as number);
               }}
-              sx={{ flex: 1, minWidth: 140, mx: 1 }}
             />
-          </Stack>
+          </Box>
 
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1.5, maxWidth: 640, mx: "auto" }}>
             {timeline?.caveats.join(" ")}
