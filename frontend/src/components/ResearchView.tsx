@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -9,18 +9,21 @@ import {
   CircularProgress,
   Container,
   Grid,
+  IconButton,
   MenuItem,
   Paper,
   Select,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
-import { Search, Troubleshoot } from "@mui/icons-material";
+import { Search, Troubleshoot, ZoomIn, ZoomOutMap } from "@mui/icons-material";
 import { nasa } from "@/theme";
 import {
   analyzeRegion,
   getSpectrum,
+  patchCenter,
   resolveAssetUrl,
   type Analysis,
   type Candidate,
@@ -96,6 +99,13 @@ export default function ResearchView() {
   const [spectrum, setSpectrum] = useState<Spectrum | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
 
+  // Patch selection + zoom state for the change-detection surface.
+  const [activeCenter, setActiveCenter] = useState<{ ra: number; dec: number; fov: number }>({ ra: DEFAULT_RA, dec: DEFAULT_DEC, fov: 15 });
+  const [selStart, setSelStart] = useState<{ x: number; y: number } | null>(null);
+  const [selRect, setSelRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const [zooming, setZooming] = useState(false);
+  const refImageRef = useRef<HTMLDivElement | null>(null);
+
   const goTo = (ra: number, dec: number) => {
     if (!Number.isFinite(ra) || ra < 0 || ra >= 360 || !Number.isFinite(dec) || dec < -90 || dec > 90) {
       setInputError("Right Ascension must be 0–360 and Declination −90 to +90 (decimal degrees).");
@@ -105,9 +115,11 @@ export default function ResearchView() {
     setPosition({ ra, dec });
     setRaInput(String(ra));
     setDecInput(String(dec));
+    setActiveCenter((center) => ({ ...center, ra, dec, fov }));
     setAnalysis(null);
     setCandidate(null);
     setScanError(null);
+    setSelRect(null);
     window.history.replaceState(null, "", `?ra=${ra}&dec=${dec}`);
   };
 
@@ -135,15 +147,16 @@ export default function ResearchView() {
   };
 
   const frames = useMemo(() => timeline?.frames ?? [], [timeline]);
+  const frameA = frames.find((item) => item.observation_id === epochA) ?? null;
 
-  const runScan = async () => {
+  const runScan = async (center: { ra: number; dec: number; fov: number }) => {
     if (!epochA || !epochB) return;
     setScanning(true);
     setScanError(null);
     setAnalysis(null);
     setCandidate(null);
     try {
-      const result = await analyzeRegion(epochA, epochB, position.ra, position.dec, fov, CUTOUT_SIZE);
+      const result = await analyzeRegion(epochA, epochB, center.ra, center.dec, center.fov, CUTOUT_SIZE);
       setAnalysis(result);
       setCandidate(result.candidates[0] ?? null);
     } catch (error) {
@@ -152,6 +165,51 @@ export default function ResearchView() {
       setScanning(false);
     }
   };
+
+  const zoomToSelection = async () => {
+    if (!selRect) return;
+    setZooming(true);
+    setScanError(null);
+    try {
+      const patch = await patchCenter(position.ra, position.dec, fov, selRect.x0, selRect.y0, selRect.x1, selRect.y1, CUTOUT_SIZE);
+      const center = { ra: patch.ra, dec: patch.dec, fov: patch.fov_arcmin };
+      setActiveCenter(center);
+      setSelRect(null);
+      await runScan(center);
+    } catch (error) {
+      setScanError(error instanceof Error ? error.message : "Could not zoom into the selected patch.");
+    } finally {
+      setZooming(false);
+    }
+  };
+
+  const resetZoom = () => {
+    setSelRect(null);
+    setActiveCenter({ ra: position.ra, dec: position.dec, fov });
+    void runScan({ ra: position.ra, dec: position.dec, fov });
+  };
+
+  // Fraction-of-image selection on the reference frame.
+  const pointerDown = (event: React.PointerEvent) => {
+    const node = refImageRef.current;
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    setSelStart({ x: (event.clientX - rect.left) / rect.width, y: (event.clientY - rect.top) / rect.height });
+    setSelRect(null);
+  };
+  const pointerMove = (event: React.PointerEvent) => {
+    if (!selStart || !refImageRef.current) return;
+    const rect = refImageRef.current.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width;
+    const y = (event.clientY - rect.top) / rect.height;
+    setSelRect({
+      x0: Math.min(selStart.x, x),
+      y0: Math.min(selStart.y, y),
+      x1: Math.max(selStart.x, x),
+      y1: Math.max(selStart.y, y),
+    });
+  };
+  const pointerUp = () => setSelStart(null);
 
   const spectrumKey = `${position.ra}|${position.dec}`;
   const [lastSpectrumKey, setLastSpectrumKey] = useState(spectrumKey);
@@ -219,7 +277,13 @@ export default function ResearchView() {
             <Select
               size="small"
               value={fov}
-              onChange={(event) => setFov(Number(event.target.value))}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                setFov(next);
+                setActiveCenter((center) => ({ ...center, fov: next }));
+                setSelRect(null);
+                setAnalysis(null);
+              }}
               sx={{ minWidth: 120, fontSize: 13 }}
             >
               {[5, 15, 30, 60].map((option) => (
@@ -247,7 +311,7 @@ export default function ResearchView() {
               title="Motion"
               lead="Play the epochs in date order, blink the first against the last, and run change detection to flag objects whose position changed."
             >
-              <TimelinePlayer ra={position.ra} dec={position.dec} fov={fov} onFovChange={setFov} onTimeline={onTimeline} />
+              <TimelinePlayer ra={position.ra} dec={position.dec} fov={fov} onFovChange={(next) => { setFov(next); setActiveCenter((c) => ({ ...c, fov: next })); setSelRect(null); }} onTimeline={onTimeline} />
             </Section>
           </Grid>
 
@@ -256,7 +320,7 @@ export default function ResearchView() {
             <Section
               number="2"
               title="Change detection"
-              lead="Noise-normalized difference between two epochs. Candidates are unclassified — a moving solar-system body, a variable source, or an artifact."
+              lead="Noise-normalized difference between two epochs. Drag a box on the reference frame to zoom into a patch. Candidates are unclassified."
             >
               {frames.length < 2 ? (
                 <Alert severity="info">At least two observations are needed to compare dates.</Alert>
@@ -285,7 +349,7 @@ export default function ResearchView() {
                       color="secondary"
                       startIcon={scanning ? <CircularProgress size={16} color="inherit" /> : <Troubleshoot />}
                       disabled={scanning || !epochA || !epochB || epochA === epochB}
-                      onClick={runScan}
+                      onClick={() => runScan(activeCenter)}
                     >
                       {scanning ? "Comparing…" : "Find changes"}
                     </Button>
@@ -295,6 +359,71 @@ export default function ResearchView() {
                     <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setScanError(null)}>
                       {scanError}
                     </Alert>
+                  )}
+
+                  {/* Reference frame with drag-to-select patch zoom */}
+                  {frameA && (
+                    <Box sx={{ mb: 2 }}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                        <Typography variant="caption" color="text.secondary">
+                          Drag a box on the reference frame ({frameDate(frameA)}) to zoom the difference into that patch.
+                        </Typography>
+                        <Stack direction="row" spacing={0.5}>
+                          <Button
+                            size="small"
+                            startIcon={zooming ? <CircularProgress size={12} color="inherit" /> : <ZoomIn />}
+                            disabled={!selRect || zooming}
+                            onClick={zoomToSelection}
+                          >
+                            Zoom to selection
+                          </Button>
+                          <Tooltip title="Reset to the full field">
+                            <IconButton size="small" onClick={resetZoom} aria-label="Reset zoom">
+                              <ZoomOutMap />
+                            </IconButton>
+                          </Tooltip>
+                        </Stack>
+                      </Stack>
+                      <Box
+                        ref={refImageRef}
+                        onPointerDown={pointerDown}
+                        onPointerMove={pointerMove}
+                        onPointerUp={pointerUp}
+                        onPointerLeave={pointerUp}
+                        sx={{
+                          position: "relative",
+                          border: "1px solid",
+                          borderColor: "divider",
+                          bgcolor: "#000",
+                          cursor: "crosshair",
+                          touchAction: "none",
+                          userSelect: "none",
+                          maxWidth: 460,
+                        }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={resolveAssetUrl(frameA.cutout_url) ?? undefined}
+                          alt={`Reference frame from ${frameDate(frameA)}`}
+                          style={{ width: "100%", display: "block", aspectRatio: "1", pointerEvents: "none" }}
+                          draggable={false}
+                        />
+                        {selRect && (
+                          <Box
+                            sx={{
+                              position: "absolute",
+                              left: `${selRect.x0 * 100}%`,
+                              top: `${selRect.y0 * 100}%`,
+                              width: `${(selRect.x1 - selRect.x0) * 100}%`,
+                              height: `${(selRect.y1 - selRect.y0) * 100}%`,
+                              border: `2px solid ${nasa.red}`,
+                              bgcolor: "rgba(246,65,55,.15)",
+                              pointerEvents: "none",
+                            }}
+                          />
+                        )}
+                      </Box>
+                    </Box>
                   )}
 
                   {analysis && analysis.difference_image_url && (
