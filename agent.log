@@ -2,1042 +2,109 @@
 > space-region-explorer · big-pickle
 [0m
 [0m$ [0mcurl -s http://localhost:8000/api/health
-{"status":"ok","provider":"cached","observation_count":19}
+{"status":"ok","provider":"cached","observation_count":63}
 [0m
-I'll start by checking the backend health and confirming the explorer script exists.
-[0m$ [0mls -la scripts/ data/ 2>/dev/null; echo "---"; python3 -c "import cv2, numpy; print('cv2', cv2.__version__)" 2>&1
-data/:
-total 28
-drwxrwxr-x  5 ileab ileab 4096 Nov 14 12:18 .
-drwxrwxr-x 11 ileab ileab 4096 Nov 14 12:14 ..
-drwxrwxr-x  6 ileab ileab 4096 Nov 14 12:20 explorations
-drwxrwxr-x  2 ileab ileab 4096 Nov 14 13:46 gaia
--rw-rw-r--  1 ileab ileab 8050 Nov 14 13:47 marks.json
-drwxrwxr-x  2 ileab ileab 4096 Nov 14 11:29 raw
-
-scripts/:
-total 84
-drwxrwxr-x  3 ileab ileab  4096 Nov 14 12:00 .
-drwxrwxr-x 11 ileab ileab  4096 Nov 14 12:14 ..
-drwxrwxr-x  2 ileab ileab  4096 Nov 14 12:21 __pycache__
--rw-rw-r--  1 ileab ileab  3047 Nov 14 09:46 backfill_supabase.py
--rw-rw-r--  1 ileab ileab 11889 Nov 14 09:46 download_data.py
--rw-rw-r--  1 ileab ileab 10147 Nov 14 12:04 explore_regions.py
--rw-rw-r--  1 ileab ileab  5586 Nov 14 09:46 preprocess.py
--rw-rw-r--  1 ileab ileab   100 Nov 14 09:46 requirements-scrape.txt
--rw-rw-r--  1 ileab ileab  1087 Nov 14 09:46 scrape.bat
--rwxrwxr-x  1 ileab ileab  1484 Nov 14 09:46 scrape.sh
--rw-rw-r--  1 ileab ileab  1748 Nov 14 09:46 scrape_targets.py
--rw-rw-r--  1 ileab ileab 10877 Nov 14 09:46 scrape_timeline.py
--rw-rw-r--  1 ileab ileab  8105 Nov 14 09:46 scraper.py
----
-cv2 4.13.0
+[0m$ [0mls scripts/ 2>/dev/null && ls data/explorations 2>/dev/null | head -20
+__pycache__
+backfill_supabase.py
+download_data.py
+explore_regions.py
+preprocess.py
+requirements-scrape.txt
+scrape.bat
+scrape.sh
+scrape_targets.py
+scrape_timeline.py
+scraper.py
+fov24_thr200
+minarea20
+ra76p9600_dec30p4000.json
+ra76p9600_dec30p4000_analyze_feb_mar.json
+ra76p9600_dec30p4000_analyze_fov12.json
+ra76p9600_dec30p4000_analyze_fov24.json
+ra76p9600_dec30p4000_analyze_mar_sep.json
+ra76p9600_dec30p4000_analyze_region.json
+ra76p9600_dec30p4000_candidates_enriched.json
+ra76p9600_dec30p4000_diff_annotated.png
+ra76p9600_dec30p4000_montage.png
+ra76p9600_dec30p4000_opencv_threshold120.json
+ra76p9600_dec30p4000_significance.json
+threshold120
+threshold200_auto
+threshold250
 [0m
+I'll explore that region. First, let me confirm the backend is up and check the exploration script exists.
 [0m→ [0mRead scripts/explore_regions.py
-Backend is up (cached provider, 19 observations). Let me inspect the explorer script's behavior before running it.
 [0m
-[0m$ [0mcurl -s "http://localhost:8000/api/timeline?ra=76.96&dec=30.40&fov=10" | python3 -m json.tool 2>&1 | head -80
-{
-    "status": "ok",
-    "ra": 76.96,
-    "dec": 30.4,
-    "fov_arcmin": 10.0,
-    "band": "3",
-    "available_bands": {
-        "3": 3
-    },
-    "frames": [
-        {
-            "observation_id": "live_76p9600_30p4000_level2_2026W08_2A_0233_3D3_spx_l2bv272026227",
-            "epoch": "2026-02-20T17:20:32.679000Z",
-            "band": "3",
-            "wavelength": 2.2133545875549316,
-            "cutout_url": "/api/cutout/live_76p9600_30p4000_level2_2026W08_2A_0233_3D3_spx_l2bv272026227?ra=76.96&dec=30.4&fov=10.0&size=256&vmin=0.16044&vmax=9.76945",
-            "source": "live",
-            "coverage": 1.0
-        },
-        {
-            "observation_id": "live_76p9600_30p4000_level2_2026W10_1A_0120_1D3_spx_l2bv272026229",
-            "epoch": "2026-03-02T13:31:14.591000Z",
-            "band": "3",
-            "wavelength": 2.2133545875549316,
-            "cutout_url": "/api/cutout/live_76p9600_30p4000_level2_2026W10_1A_0120_1D3_spx_l2bv272026229?ra=76.96&dec=30.4&fov=10.0&size=256&vmin=0.16044&vmax=9.76945",
-            "source": "live",
-            "coverage": 1.0
-        },
-        {
-            "observation_id": "live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261",
-            "epoch": "2026-09-16T06:50:29.796000Z",
-            "band": "3",
-            "wavelength": 2.2133545875549316,
-            "cutout_url": "/api/cutout/live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261?ra=76.96&dec=30.4&fov=10.0&size=256&vmin=0.16044&vmax=9.76945",
-            "source": "live",
-            "coverage": 1.0
-        }
-    ],
-    "caveats": [
-        "Frames are bilinearly resampled onto a shared north-up grid for alignment (display-grade).",
-        "All frames share one brightness scale, so brightness changes between dates are real signal (within calibration limits).",
-        "Gray areas are outside an exposure's detector footprint or masked as unreliable pixels.",
-        "Consecutive frames can be weeks or months apart; motion between frames is not continuous."
-    ],
-    "message": null
-}
+[0m$ [0mls -la data/explorations/ | head -40
+total 784
+drwxrwxr-x 7 ileab ileab   4096 Nov 14 14:26 .
+drwxrwxr-x 7 ileab ileab   4096 Nov 14 15:06 ..
+drwxrwxr-x 2 ileab ileab   4096 Nov 14 12:07 fov24_thr200
+drwxrwxr-x 2 ileab ileab   4096 Nov 14 14:26 minarea20
+-rw-rw-r-- 1 ileab ileab 111426 Nov 14 14:26 ra76p9600_dec30p4000.json
+-rw-rw-r-- 1 ileab ileab  16356 Nov 14 11:59 ra76p9600_dec30p4000_analyze_feb_mar.json
+-rw-rw-r-- 1 ileab ileab  32941 Nov 14 12:21 ra76p9600_dec30p4000_analyze_fov12.json
+-rw-rw-r-- 1 ileab ileab  32561 Nov 14 12:21 ra76p9600_dec30p4000_analyze_fov24.json
+-rw-rw-r-- 1 ileab ileab  12975 Nov 14 11:59 ra76p9600_dec30p4000_analyze_mar_sep.json
+-rw-rw-r-- 1 ileab ileab  13278 Nov 14 11:58 ra76p9600_dec30p4000_analyze_region.json
+-rw-rw-r-- 1 ileab ileab  28506 Nov 14 11:59 ra76p9600_dec30p4000_candidates_enriched.json
+-rw-rw-r-- 1 ileab ileab  88944 Nov 14 14:26 ra76p9600_dec30p4000_diff_annotated.png
+-rw-rw-r-- 1 ileab ileab 306500 Nov 14 14:26 ra76p9600_dec30p4000_montage.png
+-rw-rw-r-- 1 ileab ileab  84814 Nov 14 11:59 ra76p9600_dec30p4000_opencv_threshold120.json
+-rw-rw-r-- 1 ileab ileab  26127 Nov 14 12:01 ra76p9600_dec30p4000_significance.json
+drwxrwxr-x 2 ileab ileab   4096 Nov 14 11:59 threshold120
+drwxrwxr-x 2 ileab ileab   4096 Nov 14 12:03 threshold200_auto
+drwxrwxr-x 2 ileab ileab   4096 Nov 14 12:01 threshold250
 [0m
-Three epochs exist for this position (band 3, source `live`). Running the explorer with the default 24′ FOV.
-[0m$ [0mpython3 scripts/explore_regions.py --ra 76.96 --dec 30.40 --fov 24 --out data/explorations 2>&1
-...output truncated...
-
-Full output saved to: /home/ileab/.local/share/opencode/tool-output/tool_1da05ef72001OymCcWhoLEyNMh
-
-      "height": 4,
-      "width": 3,
-      "area": 6,
-      "score": 235.3333282470703,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-216",
-      "row": 110,
-      "column": 114,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 233.88888549804688,
+Backend is up (cached provider, 63 observations). There are prior explorations at this same position — let me inspect the script and existing outputs to avoid clobbering them.
+Prior artifacts exist at this position, so I'll write the fresh run to a separate directory to preserve them. Running the explorer now (default FOV 24').
+[0m$ [0mpython3 scripts/explore_regions.py --ra 76.96 --dec 30.40 --fov 24 --out data/explorations/rerun_20261114 2>&1 | tail -100
+"score": 210.0,
       "sign": "dimmed",
       "coordinate_space": "diff_image_pixel",
       "classification": "unclassified_candidate"
     },
     {
-      "candidate_id": "cv2-217",
-      "row": 109,
-      "column": 76,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 229.44444274902344,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-218",
-      "row": 109,
-      "column": 53,
-      "height": 9,
-      "width": 5,
-      "area": 22,
-      "score": 239.6764678955078,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-219",
-      "row": 109,
-      "column": 8,
-      "height": 4,
-      "width": 6,
-      "area": 10,
-      "score": 229.8333282470703,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-220",
-      "row": 108,
-      "column": 90,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 247.88888549804688,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-221",
-      "row": 108,
-      "column": 84,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 236.22222900390625,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-222",
-      "row": 107,
-      "column": 121,
-      "height": 4,
-      "width": 4,
-      "area": 8,
-      "score": 209.13333129882812,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-223",
-      "row": 107,
-      "column": 36,
-      "height": 10,
-      "width": 5,
-      "area": 27,
-      "score": 237.5853729248047,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-224",
-      "row": 105,
-      "column": 24,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 218.44444274902344,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-225",
-      "row": 104,
-      "column": 85,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 239.44444274902344,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-226",
-      "row": 104,
-      "column": 80,
-      "height": 4,
-      "width": 3,
-      "area": 6,
-      "score": 204.1666717529297,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-227",
-      "row": 104,
-      "column": 10,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 206.22222900390625,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-228",
-      "row": 103,
-      "column": 137,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 247.22222900390625,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-229",
-      "row": 103,
+      "candidate_id": "cv2-103",
+      "row": 17,
       "column": 19,
       "height": 3,
       "width": 3,
       "area": 4,
-      "score": 220.77777099609375,
+      "score": 171.77777099609375,
       "sign": "dimmed",
       "coordinate_space": "diff_image_pixel",
       "classification": "unclassified_candidate"
     },
     {
-      "candidate_id": "cv2-230",
-      "row": 102,
-      "column": 184,
+      "candidate_id": "cv2-104",
+      "row": 16,
+      "column": 190,
       "height": 3,
       "width": 3,
       "area": 4,
-      "score": 235.44444274902344,
+      "score": 200.6666717529297,
       "sign": "dimmed",
       "coordinate_space": "diff_image_pixel",
       "classification": "unclassified_candidate"
     },
     {
-      "candidate_id": "cv2-231",
-      "row": 99,
-      "column": 247,
-      "height": 4,
-      "width": 6,
-      "area": 13,
-      "score": 212.0,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-232",
-      "row": 99,
-      "column": 138,
-      "height": 3,
-      "width": 4,
-      "area": 6,
-      "score": 231.4166717529297,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-233",
-      "row": 98,
-      "column": 105,
+      "candidate_id": "cv2-105",
+      "row": 12,
+      "column": 160,
       "height": 3,
       "width": 3,
       "area": 4,
-      "score": 240.3333282470703,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-234",
-      "row": 97,
-      "column": 169,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 208.6666717529297,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-235",
-      "row": 97,
-      "column": 14,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 200.11111450195312,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-236",
-      "row": 96,
-      "column": 225,
-      "height": 9,
-      "width": 5,
-      "area": 22,
-      "score": 236.44117736816406,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-237",
-      "row": 96,
-      "column": 197,
-      "height": 14,
-      "width": 8,
-      "area": 43,
-      "score": 234.53030395507812,
+      "score": 219.0,
       "sign": "dimmed",
       "coordinate_space": "diff_image_pixel",
       "classification": "unclassified_candidate"
     },
     {
-      "candidate_id": "cv2-238",
-      "row": 96,
-      "column": 80,
-      "height": 7,
-      "width": 4,
-      "area": 12,
-      "score": 218.04762268066406,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-239",
-      "row": 95,
-      "column": 186,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 208.0,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-240",
-      "row": 95,
-      "column": 131,
-      "height": 4,
-      "width": 5,
-      "area": 10,
-      "score": 231.27777099609375,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-241",
-      "row": 95,
-      "column": 89,
-      "height": 10,
-      "width": 6,
-      "area": 31,
-      "score": 239.38636779785156,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-242",
-      "row": 94,
-      "column": 38,
-      "height": 7,
-      "width": 9,
-      "area": 25,
-      "score": 217.974365234375,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-243",
-      "row": 93,
-      "column": 121,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 227.88888549804688,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-244",
-      "row": 92,
-      "column": 126,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 223.55555725097656,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-245",
-      "row": 91,
-      "column": 154,
-      "height": 4,
-      "width": 4,
-      "area": 8,
-      "score": 220.06666564941406,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-246",
-      "row": 91,
-      "column": 148,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 203.77777099609375,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-247",
-      "row": 91,
-      "column": 134,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 255.0,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-248",
-      "row": 90,
-      "column": 202,
-      "height": 4,
-      "width": 4,
-      "area": 8,
-      "score": 233.53334045410156,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-249",
-      "row": 89,
-      "column": 122,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 239.88888549804688,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-250",
-      "row": 89,
-      "column": 93,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 229.3333282470703,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-251",
-      "row": 89,
-      "column": 41,
-      "height": 5,
-      "width": 7,
-      "area": 11,
-      "score": 228.2857208251953,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-252",
-      "row": 88,
-      "column": 3,
-      "height": 10,
-      "width": 9,
-      "area": 46,
-      "score": 231.72308349609375,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-253",
-      "row": 87,
-      "column": 17,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 242.88888549804688,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-254",
-      "row": 85,
-      "column": 178,
-      "height": 3,
-      "width": 6,
-      "area": 10,
-      "score": 217.44444274902344,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-255",
-      "row": 84,
-      "column": 228,
-      "height": 3,
-      "width": 4,
-      "area": 6,
-      "score": 212.8333282470703,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-256",
-      "row": 84,
-      "column": 100,
-      "height": 4,
-      "width": 5,
-      "area": 11,
-      "score": 210.88888549804688,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-257",
-      "row": 83,
-      "column": 243,
-      "height": 6,
-      "width": 4,
-      "area": 10,
-      "score": 229.8333282470703,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-258",
-      "row": 82,
-      "column": 171,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 235.11111450195312,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-259",
-      "row": 81,
-      "column": 182,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 195.22222900390625,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-260",
-      "row": 81,
-      "column": 118,
-      "height": 5,
-      "width": 7,
-      "area": 13,
-      "score": 213.42308044433594,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-261",
-      "row": 80,
-      "column": 161,
-      "height": 25,
-      "width": 8,
-      "area": 68,
-      "score": 230.5631103515625,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-262",
-      "row": 79,
-      "column": 237,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 204.11111450195312,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-263",
-      "row": 79,
-      "column": 186,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 255.0,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-264",
-      "row": 79,
-      "column": 102,
-      "height": 4,
-      "width": 4,
-      "area": 8,
-      "score": 240.2857208251953,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-265",
-      "row": 78,
-      "column": 123,
-      "height": 4,
-      "width": 3,
-      "area": 6,
-      "score": 201.3333282470703,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-266",
-      "row": 76,
-      "column": 248,
-      "height": 7,
-      "width": 5,
-      "area": 14,
-      "score": 239.2916717529297,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-267",
-      "row": 76,
-      "column": 156,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 156.11111450195312,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-268",
-      "row": 76,
-      "column": 131,
-      "height": 6,
-      "width": 5,
-      "area": 9,
-      "score": 221.55555725097656,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-269",
-      "row": 76,
-      "column": 117,
-      "height": 4,
-      "width": 5,
-      "area": 9,
-      "score": 245.9375,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-270",
-      "row": 76,
-      "column": 93,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 233.88888549804688,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-271",
-      "row": 76,
-      "column": 84,
-      "height": 11,
-      "width": 7,
-      "area": 35,
-      "score": 221.13461303710938,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-272",
-      "row": 75,
-      "column": 164,
-      "height": 4,
-      "width": 3,
-      "area": 6,
-      "score": 229.6666717529297,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-273",
-      "row": 74,
-      "column": 199,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 204.44444274902344,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-274",
-      "row": 74,
-      "column": 187,
-      "height": 4,
-      "width": 4,
-      "area": 9,
-      "score": 204.0,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-275",
-      "row": 74,
-      "column": 77,
-      "height": 3,
-      "width": 4,
-      "area": 6,
-      "score": 233.0,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-276",
-      "row": 74,
-      "column": 63,
-      "height": 11,
-      "width": 5,
-      "area": 23,
-      "score": 243.0833282470703,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-277",
-      "row": 72,
-      "column": 252,
-      "height": 4,
-      "width": 4,
-      "area": 7,
-      "score": 214.07142639160156,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-278",
-      "row": 71,
-      "column": 142,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 186.0,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-279",
-      "row": 70,
-      "column": 77,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 197.22222900390625,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-280",
-      "row": 69,
-      "column": 84,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 227.0,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-281",
-      "row": 69,
-      "column": 24,
-      "height": 11,
-      "width": 8,
-      "area": 41,
-      "score": 229.93333435058594,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-282",
-      "row": 67,
-      "column": 57,
-      "height": 4,
-      "width": 3,
-      "area": 6,
-      "score": 204.4166717529297,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-283",
-      "row": 66,
-      "column": 171,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 255.0,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-284",
-      "row": 65,
-      "column": 216,
-      "height": 10,
-      "width": 6,
-      "area": 32,
-      "score": 231.06666564941406,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-285",
-      "row": 65,
-      "column": 211,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 233.6666717529297,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-286",
-      "row": 64,
-      "column": 254,
-      "height": 6,
-      "width": 2,
-      "area": 5,
-      "score": 234.9166717529297,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-287",
-      "row": 64,
-      "column": 182,
-      "height": 8,
-      "width": 5,
-      "area": 21,
-      "score": 207.39393615722656,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-288",
-      "row": 64,
-      "column": 163,
-      "height": 6,
-      "width": 6,
-      "area": 8,
-      "score": 223.0,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-289",
-      "row": 64,
-      "column": 134,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 237.44444274902344,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-290",
-      "row": 64,
-      "column": 36,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 191.44444274902344,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-291",
-      "row": 63,
-      "column": 145,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 232.44444274902344,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-292",
-      "row": 62,
-      "column": 171,
-      "height": 3,
-      "width": 4,
-      "area": 6,
-      "score": 242.6666717529297,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-293",
-      "row": 60,
-      "column": 13,
-      "height": 4,
-      "width": 4,
-      "area": 8,
-      "score": 224.46665954589844,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-294",
-      "row": 59,
-      "column": 71,
+      "candidate_id": "cv2-106",
+      "row": 9,
+      "column": 46,
       "height": 3,
       "width": 3,
       "area": 4,
@@ -1047,1041 +114,45 @@ Full output saved to: /home/ileab/.local/share/opencode/tool-output/tool_1da05ef
       "classification": "unclassified_candidate"
     },
     {
-      "candidate_id": "cv2-295",
-      "row": 59,
-      "column": 59,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 198.11111450195312,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-296",
-      "row": 59,
-      "column": 8,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 179.88888549804688,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-297",
-      "row": 57,
-      "column": 45,
-      "height": 4,
-      "width": 5,
-      "area": 10,
-      "score": 230.8333282470703,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-298",
-      "row": 56,
-      "column": 230,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 235.0,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-299",
-      "row": 55,
-      "column": 72,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 208.88888549804688,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-300",
-      "row": 54,
-      "column": 213,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 230.3333282470703,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-301",
-      "row": 54,
-      "column": 85,
-      "height": 4,
-      "width": 3,
-      "area": 6,
-      "score": 221.3333282470703,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-302",
-      "row": 54,
-      "column": 14,
-      "height": 4,
-      "width": 4,
-      "area": 8,
-      "score": 209.57142639160156,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-303",
-      "row": 53,
-      "column": 178,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 230.77777099609375,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-304",
-      "row": 53,
-      "column": 57,
-      "height": 4,
-      "width": 4,
-      "area": 8,
-      "score": 204.53334045410156,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-305",
-      "row": 52,
-      "column": 165,
-      "height": 9,
-      "width": 6,
-      "area": 26,
-      "score": 245.42105102539062,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-306",
-      "row": 52,
-      "column": 120,
-      "height": 12,
-      "width": 6,
-      "area": 46,
-      "score": 218.4516143798828,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-307",
-      "row": 52,
-      "column": 92,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 234.77777099609375,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-308",
-      "row": 52,
-      "column": 47,
-      "height": 4,
-      "width": 4,
-      "area": 9,
-      "score": 216.875,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-309",
-      "row": 50,
-      "column": 12,
-      "height": 3,
-      "width": 4,
-      "area": 6,
-      "score": 220.25,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-310",
-      "row": 49,
-      "column": 215,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 233.77777099609375,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-311",
-      "row": 49,
-      "column": 86,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 224.77777099609375,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-312",
-      "row": 47,
-      "column": 244,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 234.88888549804688,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-313",
-      "row": 45,
-      "column": 146,
-      "height": 6,
-      "width": 4,
-      "area": 10,
-      "score": 243.3333282470703,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-314",
-      "row": 45,
-      "column": 124,
-      "height": 5,
-      "width": 4,
-      "area": 10,
-      "score": 226.64706420898438,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-315",
-      "row": 42,
-      "column": 76,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 181.44444274902344,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-316",
-      "row": 41,
-      "column": 131,
-      "height": 25,
-      "width": 13,
-      "area": 115,
-      "score": 224.1801300048828,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-317",
-      "row": 41,
-      "column": 125,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 245.44444274902344,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-318",
-      "row": 41,
-      "column": 100,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 165.88888549804688,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-319",
-      "row": 41,
-      "column": 11,
-      "height": 4,
-      "width": 4,
-      "area": 8,
-      "score": 245.0,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-320",
-      "row": 39,
-      "column": 211,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 240.3333282470703,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-321",
-      "row": 39,
-      "column": 187,
-      "height": 4,
-      "width": 3,
-      "area": 6,
-      "score": 230.9166717529297,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-322",
-      "row": 39,
-      "column": 81,
-      "height": 5,
-      "width": 3,
-      "area": 8,
-      "score": 202.26666259765625,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-323",
-      "row": 38,
-      "column": 250,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 213.44444274902344,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-324",
-      "row": 38,
-      "column": 202,
-      "height": 10,
-      "width": 8,
-      "area": 27,
-      "score": 237.14285278320312,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-325",
-      "row": 38,
-      "column": 109,
-      "height": 10,
-      "width": 10,
-      "area": 44,
-      "score": 219.8225860595703,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-326",
-      "row": 36,
-      "column": 87,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 255.0,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-327",
-      "row": 36,
-      "column": 69,
-      "height": 10,
-      "width": 6,
-      "area": 31,
-      "score": 234.0,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-328",
-      "row": 35,
-      "column": 201,
-      "height": 3,
-      "width": 4,
-      "area": 6,
-      "score": 215.5833282470703,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-329",
-      "row": 34,
-      "column": 207,
-      "height": 3,
-      "width": 4,
-      "area": 6,
-      "score": 242.75,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-330",
-      "row": 34,
-      "column": 188,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 221.11111450195312,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-331",
-      "row": 34,
-      "column": 82,
-      "height": 4,
-      "width": 3,
-      "area": 6,
-      "score": 246.0,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-332",
-      "row": 33,
-      "column": 38,
-      "height": 9,
-      "width": 11,
-      "area": 43,
-      "score": 221.93650817871094,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-333",
-      "row": 33,
-      "column": 19,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 229.6666717529297,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-334",
-      "row": 33,
-      "column": 9,
-      "height": 7,
-      "width": 8,
-      "area": 26,
-      "score": 238.19512939453125,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-335",
-      "row": 32,
-      "column": 146,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 210.6666717529297,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-336",
-      "row": 32,
-      "column": 88,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 255.0,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-337",
-      "row": 31,
-      "column": 245,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 198.77777099609375,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-338",
-      "row": 31,
-      "column": 161,
-      "height": 8,
-      "width": 4,
-      "area": 14,
-      "score": 242.375,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-339",
-      "row": 31,
-      "column": 116,
-      "height": 11,
-      "width": 9,
-      "area": 57,
-      "score": 232.94871520996094,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-340",
-      "row": 31,
-      "column": 95,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 234.11111450195312,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-341",
-      "row": 30,
-      "column": 202,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 240.77777099609375,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-342",
-      "row": 30,
-      "column": 63,
-      "height": 3,
-      "width": 4,
-      "area": 6,
-      "score": 206.1666717529297,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-343",
-      "row": 29,
-      "column": 190,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 217.0,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-344",
-      "row": 29,
-      "column": 41,
-      "height": 3,
-      "width": 4,
-      "area": 6,
-      "score": 213.9166717529297,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-345",
-      "row": 28,
-      "column": 230,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 220.6666717529297,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-346",
-      "row": 28,
-      "column": 158,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 240.22222900390625,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-347",
-      "row": 28,
-      "column": 75,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 251.22222900390625,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-348",
-      "row": 28,
-      "column": 12,
-      "height": 4,
-      "width": 6,
-      "area": 12,
-      "score": 241.85714721679688,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-349",
-      "row": 27,
-      "column": 135,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 255.0,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-350",
-      "row": 26,
-      "column": 131,
-      "height": 8,
-      "width": 6,
-      "area": 12,
-      "score": 234.1999969482422,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-351",
-      "row": 24,
-      "column": 185,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 253.0,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-352",
-      "row": 24,
-      "column": 163,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 255.0,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-353",
-      "row": 23,
-      "column": 191,
-      "height": 4,
-      "width": 5,
-      "area": 11,
-      "score": 217.0,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-354",
-      "row": 20,
-      "column": 164,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 233.44444274902344,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-355",
-      "row": 20,
-      "column": 35,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 244.6666717529297,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-356",
-      "row": 18,
-      "column": 252,
-      "height": 12,
-      "width": 4,
-      "area": 17,
-      "score": 240.80645751953125,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-357",
-      "row": 17,
-      "column": 51,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 225.88888549804688,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-358",
-      "row": 16,
-      "column": 190,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 247.44444274902344,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-359",
-      "row": 16,
-      "column": 161,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 240.55555725097656,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-360",
-      "row": 13,
-      "column": 219,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 222.55555725097656,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-361",
-      "row": 13,
-      "column": 60,
-      "height": 3,
-      "width": 5,
-      "area": 8,
-      "score": 197.3333282470703,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-362",
-      "row": 13,
-      "column": 52,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 235.44444274902344,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-363",
-      "row": 12,
-      "column": 160,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 239.88888549804688,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-364",
-      "row": 12,
-      "column": 145,
-      "height": 9,
-      "width": 5,
-      "area": 28,
-      "score": 228.19512939453125,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-365",
-      "row": 11,
-      "column": 35,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 202.88888549804688,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-366",
-      "row": 10,
-      "column": 166,
-      "height": 6,
-      "width": 5,
-      "area": 9,
-      "score": 244.05555725097656,
-      "sign": "brightened",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-367",
-      "row": 9,
-      "column": 156,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 206.44444274902344,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-368",
-      "row": 9,
-      "column": 91,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 192.55555725097656,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-369",
-      "row": 9,
-      "column": 11,
-      "height": 13,
-      "width": 12,
-      "area": 99,
-      "score": 221.83477783203125,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-370",
+      "candidate_id": "cv2-107",
       "row": 8,
       "column": 196,
       "height": 3,
       "width": 3,
       "area": 4,
-      "score": 226.3333282470703,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-371",
-      "row": 8,
-      "column": 161,
-      "height": 3,
-      "width": 4,
-      "area": 6,
-      "score": 242.8333282470703,
+      "score": 229.55555725097656,
       "sign": "brightened",
       "coordinate_space": "diff_image_pixel",
       "classification": "unclassified_candidate"
     },
     {
-      "candidate_id": "cv2-372",
-      "row": 7,
-      "column": 202,
-      "height": 4,
-      "width": 4,
-      "area": 8,
-      "score": 220.7142791748047,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-373",
-      "row": 7,
-      "column": 96,
-      "height": 4,
-      "width": 3,
-      "area": 6,
-      "score": 198.0,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-374",
+      "candidate_id": "cv2-108",
       "row": 6,
-      "column": 221,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 236.3333282470703,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-375",
-      "row": 5,
-      "column": 86,
+      "column": 141,
       "height": 3,
       "width": 4,
       "area": 6,
-      "score": 231.25,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-376",
-      "row": 4,
-      "column": 139,
-      "height": 7,
-      "width": 6,
-      "area": 25,
-      "score": 208.69444274902344,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-377",
-      "row": 1,
-      "column": 88,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 224.11111450195312,
+      "score": 192.4166717529297,
       "sign": "brightened",
       "coordinate_space": "diff_image_pixel",
       "classification": "unclassified_candidate"
     },
     {
-      "candidate_id": "cv2-378",
-      "row": 1,
-      "column": 41,
+      "candidate_id": "cv2-109",
+      "row": 0,
+      "column": 115,
       "height": 3,
       "width": 3,
       "area": 4,
-      "score": 238.3333282470703,
+      "score": 233.22222900390625,
       "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-379",
-      "row": 0,
-      "column": 114,
-      "height": 5,
-      "width": 5,
-      "area": 14,
-      "score": 240.72727966308594,
-      "sign": "dimmed",
-      "coordinate_space": "diff_image_pixel",
-      "classification": "unclassified_candidate"
-    },
-    {
-      "candidate_id": "cv2-380",
-      "row": 0,
-      "column": 45,
-      "height": 3,
-      "width": 3,
-      "area": 4,
-      "score": 240.11111450195312,
-      "sign": "brightened",
       "coordinate_space": "diff_image_pixel",
       "classification": "unclassified_candidate"
     }
   ],
   "artifacts": {
-    "annotated": "data/explorations/ra76p9600_dec30p4000_diff_annotated.png",
-    "montage": "data/explorations/ra76p9600_dec30p4000_montage.png"
+    "annotated": "data/explorations/rerun_20261114/ra76p9600_dec30p4000_diff_annotated.png",
+    "montage": "data/explorations/rerun_20261114/ra76p9600_dec30p4000_montage.png"
   },
   "caveats": [
     "OpenCV candidates are a visual aid on rendered PNGs, not the backend's noise-normalized significance detection.",
@@ -2090,209 +161,383 @@ Full output saved to: /home/ileab/.local/share/opencode/tool-output/tool_1da05ef
   ]
 }
 [0m
-[0m$ [0mpython3 - <<'EOF'
-import json, collections
-r=json.load(open('data/explorations/ra76p9600_dec30p4000.json'))
-print({k:r[k] for k in ('region','ra','dec','fov_arcmin','status','band','context_epoch','target_epoch','context_observation_id','target_observation_id','candidate_count')})
-c=r['candidates']
-print("n=",len(c))
-print("sign:",collections.Counter(x['sign'] for x in c))
-print("area==4:",sum(1 for x in c if x['area']==4), " area<=10:",sum(1 for x in c if x['area']<=10))
-print("score>=250:",sum(1 for x in c if x['score']>=250))
-print("area desc top10:")
-for x in sorted(c,key=lambda z:z['area'],reverse=True)[:10]:
-    print(x['candidate_id'],x['row'],x['column'],x['height'],x['width'],x['area'],round(x['score'],1),x['sign'])
-EOF
-{'region': 'ra76p9600_dec30p4000', 'ra': 76.96, 'dec': 30.4, 'fov_arcmin': 24.0, 'status': 'ok', 'band': '3', 'context_epoch': '2026-02-20T17:20:32.679000Z', 'target_epoch': '2026-09-16T06:50:29.796000Z', 'context_observation_id': 'live_76p9600_30p4000_level2_2026W08_2A_0233_3D3_spx_l2bv272026227', 'target_observation_id': 'live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261', 'candidate_count': 379}
-n= 379
-sign: Counter({'dimmed': 218, 'brightened': 161})
-area==4: 180  area<=10: 275
-score>=250: 39
-area desc top10:
-cv2-316 41 131 25 13 115 224.2 dimmed
-cv2-078 200 131 24 13 103 230.3 dimmed
-cv2-369 9 11 13 12 99 221.8 dimmed
-cv2-129 163 100 18 14 93 221.3 dimmed
-cv2-261 80 161 25 8 68 230.6 dimmed
-cv2-036 226 56 15 14 67 225.7 brightened
-cv2-190 127 174 9 17 62 213.2 brightened
-cv2-339 31 116 11 9 57 232.9 brightened
-cv2-139 158 115 11 11 54 237.3 brightened
-cv2-050 216 214 7 16 52 212.9 brightened
-[0m
-[0m→ [0mRead data/explorations/ra76p9600_dec30p4000_montage.png
-The report shows an implausibly large hit count (381), which usually means the auto-threshold is picking up saturated render noise. Let me read the authoritative JSON header and inspect the montage.
-[0m
-[0m$ [0mcurl -s -X POST http://localhost:8000/api/analyze_region -H 'Content-Type: application/json' -d '{"context_epoch":"live_76p9600_30p4000_level2_2026W08_2A_0233_3D3_spx_l2bv272026227","target_epoch":"live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261","ra":76.96,"dec":30.40,"fov_arcmin":24,"size":256}' > /tmp/analyze.json; python3 - <<'EOF'
+[0m$ [0mpython3 -c "
 import json
-d=json.load(open('/tmp/analyze.json'))
-print("top keys:",list(d.keys()))
-for k,v in d.items():
-    if isinstance(v,(str,int,float,bool)) or v is None:
-        print(k,"=",v)
-cands=d.get('candidates') or d.get('detections') or []
-print("candidate_count field:",d.get('candidate_count'),"len list:",len(cands))
-for c in cands[:10]:
-    print(json.dumps(c))
-EOF
-top keys: ['status', 'context_epoch', 'target_epoch', 'difference_score', 'difference_image_url', 'candidates', 'caveats', 'message']
-status = ok
-context_epoch = live_76p9600_30p4000_level2_2026W08_2A_0233_3D3_spx_l2bv272026227
-target_epoch = live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261
-difference_score = 5.317376136779785
-difference_image_url = /api/diff/aligned?context_epoch=live_76p9600_30p4000_level2_2026W08_2A_0233_3D3_spx_l2bv272026227&target_epoch=live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261&ra=76.96&dec=30.4&fov=24.0&size=256
-message = None
-candidate_count field: None len list: 50
-{"candidate_id": "significance-119", "source": "significance", "classification": "unclassified_candidate", "row": 218, "column": 24, "height": 3, "width": 3, "area": 8, "score": 216.34530639648438, "coordinate_space": "aligned_cutout_pixel", "ra": 77.144507, "dec": 30.256121, "gaia_match": null, "gaia_checked": true, "interpretation": "No catalogued Gaia DR3 star within 10\u2033 \u2014 this change is not explained by the optical star catalog, which makes it worth closer inspection (a faint solar-system body would not be in Gaia).", "caveat": "Candidate requires scientific validation; it is not a confirmed detection."}
-{"candidate_id": "significance-027", "source": "significance", "classification": "unclassified_candidate", "row": 53, "column": 122, "height": 3, "width": 3, "area": 6, "score": 211.02490234375, "coordinate_space": "aligned_cutout_pixel", "ra": 76.967255, "dec": 30.514062, "gaia_match": null, "gaia_checked": true, "interpretation": "No catalogued Gaia DR3 star within 10\u2033 \u2014 this change is not explained by the optical star catalog, which makes it worth closer inspection (a faint solar-system body would not be in Gaia).", "caveat": "Candidate requires scientific validation; it is not a confirmed detection."}
-{"candidate_id": "significance-028", "source": "significance", "classification": "unclassified_candidate", "row": 58, "column": 121, "height": 2, "width": 3, "area": 6, "score": 207.71270751953125, "coordinate_space": "aligned_cutout_pixel", "ra": 76.969068, "dec": 30.507031, "gaia_match": {"source_id": "156434807846950912", "separation_arcsec": 7.54, "g_mag": 10.903136, "pm_total_mas_yr": 7.0, "parallax_mas": 3.4908201200230815, "variable_flag": "NOT_AVAILABLE"}, "gaia_checked": true, "interpretation": "Coincides with known star Gaia DR3 156434807846950912 at 7.5\u2033 \u2014 most plausibly that star varying or drifting, not a new object.", "caveat": "Candidate requires scientific validation; it is not a confirmed detection."}
-{"candidate_id": "significance-082", "source": "significance", "classification": "unclassified_candidate", "row": 169, "column": 107, "height": 7, "width": 4, "area": 15, "score": 205.4989013671875, "coordinate_space": "aligned_cutout_pixel", "ra": 76.99349, "dec": 30.329683, "gaia_match": {"source_id": "156288950755957248", "separation_arcsec": 6.64, "g_mag": 12.569387, "pm_total_mas_yr": 0.22, "parallax_mas": 0.1885727998458164, "variable_flag": "NOT_AVAILABLE"}, "gaia_checked": true, "interpretation": "Coincides with known star Gaia DR3 156288950755957248 at 6.6\u2033 \u2014 most plausibly that star varying or drifting, not a new object.", "caveat": "Candidate requires scientific validation; it is not a confirmed detection."}
-{"candidate_id": "significance-064", "source": "significance", "classification": "unclassified_candidate", "row": 142, "column": 206, "height": 3, "width": 3, "area": 5, "score": 204.66790771484375, "coordinate_space": "aligned_cutout_pixel", "ra": 76.815112, "dec": 30.37492, "gaia_match": null, "gaia_checked": true, "interpretation": "No catalogued Gaia DR3 star within 10\u2033 \u2014 this change is not explained by the optical star catalog, which makes it worth closer inspection (a faint solar-system body would not be in Gaia).", "caveat": "Candidate requires scientific validation; it is not a confirmed detection."}
-{"candidate_id": "significance-031", "source": "significance", "classification": "unclassified_candidate", "row": 77, "column": 87, "height": 3, "width": 3, "area": 7, "score": 199.7378692626953, "coordinate_space": "aligned_cutout_pixel", "ra": 77.030706, "dec": 30.476543, "gaia_match": null, "gaia_checked": true, "interpretation": "No catalogued Gaia DR3 star within 10\u2033 \u2014 this change is not explained by the optical star catalog, which makes it worth closer inspection (a faint solar-system body would not be in Gaia).", "caveat": "Candidate requires scientific validation; it is not a confirmed detection."}
-{"candidate_id": "significance-067", "source": "significance", "classification": "unclassified_candidate", "row": 143, "column": 117, "height": 3, "width": 3, "area": 7, "score": 199.0845489501953, "coordinate_space": "aligned_cutout_pixel", "ra": 76.9763, "dec": 30.373436, "gaia_match": {"source_id": "156429997483589120", "separation_arcsec": 8.8, "g_mag": 11.876777, "pm_total_mas_yr": 17.31, "parallax_mas": 7.680728893088619, "variable_flag": "NOT_AVAILABLE"}, "gaia_checked": true, "interpretation": "Coincides with known star Gaia DR3 156429997483589120 at 8.8\u2033 \u2014 most plausibly that star varying or drifting, not a new object.", "caveat": "Candidate requires scientific validation; it is not a confirmed detection."}
-{"candidate_id": "significance-073", "source": "significance", "classification": "unclassified_candidate", "row": 160, "column": 121, "height": 3, "width": 3, "area": 8, "score": 187.9091033935547, "coordinate_space": "aligned_cutout_pixel", "ra": 76.969053, "dec": 30.346875, "gaia_match": null, "gaia_checked": true, "interpretation": "No catalogued Gaia DR3 star within 10\u2033 \u2014 this change is not explained by the optical star catalog, which makes it worth closer inspection (a faint solar-system body would not be in Gaia).", "caveat": "Candidate requires scientific validation; it is not a confirmed detection."}
-{"candidate_id": "significance-038", "source": "significance", "classification": "unclassified_candidate", "row": 90, "column": 42, "height": 2, "width": 3, "area": 6, "score": 186.2383575439453, "coordinate_space": "aligned_cutout_pixel", "ra": 77.11226, "dec": 30.456943, "gaia_match": null, "gaia_checked": true, "interpretation": "No catalogued Gaia DR3 star within 10\u2033 \u2014 this change is not explained by the optical star catalog, which makes it worth closer inspection (a faint solar-system body would not be in Gaia).", "caveat": "Candidate requires scientific validation; it is not a confirmed detection."}
-{"candidate_id": "significance-042", "source": "significance", "classification": "unclassified_candidate", "row": 95, "column": 3, "height": 2, "width": 3, "area": 4, "score": 185.33847045898438, "coordinate_space": "aligned_cutout_pixel", "ra": 77.182934, "dec": 30.449029, "gaia_match": {"source_id": "156385222447198208", "separation_arcsec": 5.42, "g_mag": 13.402352, "pm_total_mas_yr": 3.19, "parallax_mas": 0.43225493637085666, "variable_flag": "NOT_AVAILABLE"}, "gaia_checked": true, "interpretation": "Coincides with known star Gaia DR3 156385222447198208 at 5.4\u2033 \u2014 most plausibly that star varying or drifting, not a new object.", "caveat": "Candidate requires scientific validation; it is not a confirmed detection."}
-[0m
-[0m$ [0mcurl -s http://localhost:8000/api/health; echo; ls -la data/explorations/ra76p9600_dec30p4000* 2>/dev/null
-{"status":"ok","provider":"cached","observation_count":19}
--rw-rw-r-- 1 ileab ileab 111426 Nov 14 14:26 data/explorations/ra76p9600_dec30p4000.json
--rw-rw-r-- 1 ileab ileab  16356 Nov 14 11:59 data/explorations/ra76p9600_dec30p4000_analyze_feb_mar.json
--rw-rw-r-- 1 ileab ileab  32941 Nov 14 12:21 data/explorations/ra76p9600_dec30p4000_analyze_fov12.json
--rw-rw-r-- 1 ileab ileab  32561 Nov 14 12:21 data/explorations/ra76p9600_dec30p4000_analyze_fov24.json
--rw-rw-r-- 1 ileab ileab  12975 Nov 14 11:59 data/explorations/ra76p9600_dec30p4000_analyze_mar_sep.json
--rw-rw-r-- 1 ileab ileab  13278 Nov 14 11:58 data/explorations/ra76p9600_dec30p4000_analyze_region.json
--rw-rw-r-- 1 ileab ileab  28506 Nov 14 11:59 data/explorations/ra76p9600_dec30p4000_candidates_enriched.json
--rw-rw-r-- 1 ileab ileab  88944 Nov 14 14:26 data/explorations/ra76p9600_dec30p4000_diff_annotated.png
--rw-rw-r-- 1 ileab ileab 306500 Nov 14 14:26 data/explorations/ra76p9600_dec30p4000_montage.png
--rw-rw-r-- 1 ileab ileab  84814 Nov 14 11:59 data/explorations/ra76p9600_dec30p4000_opencv_threshold120.json
--rw-rw-r-- 1 ileab ileab  26127 Nov 14 12:01 data/explorations/ra76p9600_dec30p4000_significance.json
-[0m
-I can't visually render the montage (image input unsupported in this session), so I'll rely on the authoritative JSON plus the backend's scientific baseline. Let me cross-check with `/api/analyze_region` on the same two epochs.
-[0m$ [0mpython3 - <<'EOF'
-import json, collections
-d=json.load(open('/tmp/analyze.json'))
-c=d['candidates']
-print("scientific baseline candidates:",len(c),"difference_score:",d['difference_score'])
-print("gaia matched:",sum(1 for x in c if x.get('gaia_match'))," unmatched:",sum(1 for x in c if not x.get('gaia_match')))
-print("score range:",round(min(x['score'] for x in c),1),"..",round(max(x['score'] for x in c),1))
-print("area range:",min(x['area'] for x in c),"..",max(x['area'] for x in c))
-print("\nTop 8 by score:")
-for x in sorted(c,key=lambda z:z['score'],reverse=True)[:8]:
-    g=x.get('gaia_match')
-    gs=f"Gaia {g['source_id']} @{g['separation_arcsec']}\"" if g else "no Gaia match"
-    print(f" {x['candidate_id']:18s} px=({x['column']},{x['row']}) {x['width']}x{x['height']} area={x['area']:3d} score={x['score']:6.1f} RA={x['ra']:.4f} Dec={x['dec']:.4f} | {gs}")
-print("\nTop 8 unmatched (worth closer inspection):")
-for x in [z for z in sorted(c,key=lambda z:z['score'],reverse=True) if not z.get('gaia_match')][:8]:
-    print(f" {x['candidate_id']:18s} px=({x['column']},{x['row']}) {x['width']}x{x['height']} area={x['area']:3d} score={x['score']:6.1f} RA={x['ra']:.4f} Dec={x['dec']:.4f}")
-EOF
-scientific baseline candidates: 50 difference_score: 5.317376136779785
-gaia matched: 20  unmatched: 30
-score range: 126.8 .. 216.3
-area range: 2 .. 20
-
-Top 8 by score:
- significance-119   px=(24,218) 3x3 area=  8 score= 216.3 RA=77.1445 Dec=30.2561 | no Gaia match
- significance-027   px=(122,53) 3x3 area=  6 score= 211.0 RA=76.9673 Dec=30.5141 | no Gaia match
- significance-028   px=(121,58) 3x2 area=  6 score= 207.7 RA=76.9691 Dec=30.5070 | Gaia 156434807846950912 @7.54"
- significance-082   px=(107,169) 4x7 area= 15 score= 205.5 RA=76.9935 Dec=30.3297 | Gaia 156288950755957248 @6.64"
- significance-064   px=(206,142) 3x3 area=  5 score= 204.7 RA=76.8151 Dec=30.3749 | no Gaia match
- significance-031   px=(87,77) 3x3 area=  7 score= 199.7 RA=77.0307 Dec=30.4765 | no Gaia match
- significance-067   px=(117,143) 3x3 area=  7 score= 199.1 RA=76.9763 Dec=30.3734 | Gaia 156429997483589120 @8.8"
- significance-073   px=(121,160) 3x3 area=  8 score= 187.9 RA=76.9691 Dec=30.3469 | no Gaia match
-
-Top 8 unmatched (worth closer inspection):
- significance-119   px=(24,218) 3x3 area=  8 score= 216.3 RA=77.1445 Dec=30.2561
- significance-027   px=(122,53) 3x3 area=  6 score= 211.0 RA=76.9673 Dec=30.5141
- significance-064   px=(206,142) 3x3 area=  5 score= 204.7 RA=76.8151 Dec=30.3749
- significance-031   px=(87,77) 3x3 area=  7 score= 199.7 RA=77.0307 Dec=30.4765
- significance-073   px=(121,160) 3x3 area=  8 score= 187.9 RA=76.9691 Dec=30.3469
- significance-038   px=(42,90) 3x2 area=  6 score= 186.2 RA=77.1123 Dec=30.4569
- significance-092   px=(38,191) 3x3 area=  7 score= 184.2 RA=77.1193 Dec=30.2983
- significance-081   px=(186,167) 1x2 area=  2 score= 183.1 RA=76.8532 Dec=30.3367
-[0m
-The baseline returns 50 significance candidates vs. 379 OpenCV hits — the OpenCV pass is clearly noise-dominated on a saturated render. Let me quantify the baseline and run a stricter secondary OpenCV pass (min-area 20) into a separate directory so it doesn't overwrite the primary artifacts.
-[0m$ [0mpython3 scripts/explore_regions.py --ra 76.96 --dec 30.40 --fov 24 --min-area 20 --out data/explorations/minarea20 > /tmp/minarea20.json 2>&1; python3 - <<'EOF'
-import json,collections
-r=json.load(open('data/explorations/minarea20/ra76p9600_dec30p4000.json'))
+r=json.load(open('data/explorations/rerun_20261114/ra76p9600_dec30p4000.json'))
+for k in ['region','ra','dec','fov_arcmin','status','band','context_epoch','target_epoch','context_observation_id','target_observation_id','candidate_count']:
+    print(k, '=', r.get(k))
 c=r['candidates']
-print("min-area 20 -> candidates:",len(c),"sign:",dict(collections.Counter(x['sign'] for x in c)))
-for x in sorted(c,key=lambda z:z['area'],reverse=True)[:12]:
-    print(f" {x['candidate_id']:9s} row={x['row']:3d} col={x['column']:3d} {x['width']}x{x['height']} area={x['area']:3d} score={x['score']:6.1f} {x['sign']}")
-print("artifacts:",r['artifacts'])
-EOF
-min-area 20 -> candidates: 59 sign: {'brightened': 20, 'dimmed': 39}
- cv2-316   row= 41 col=131 13x25 area=115 score= 224.2 dimmed
- cv2-078   row=200 col=131 13x24 area=103 score= 230.3 dimmed
- cv2-369   row=  9 col= 11 12x13 area= 99 score= 221.8 dimmed
- cv2-129   row=163 col=100 14x18 area= 93 score= 221.3 dimmed
- cv2-261   row= 80 col=161 8x25 area= 68 score= 230.6 dimmed
- cv2-036   row=226 col= 56 14x15 area= 67 score= 225.7 brightened
- cv2-190   row=127 col=174 17x9 area= 62 score= 213.2 brightened
- cv2-339   row= 31 col=116 9x11 area= 57 score= 232.9 brightened
- cv2-139   row=158 col=115 11x11 area= 54 score= 237.3 brightened
- cv2-050   row=216 col=214 16x7 area= 52 score= 212.9 brightened
- cv2-252   row= 88 col=  3 9x10 area= 46 score= 231.7 brightened
- cv2-306   row= 52 col=120 6x12 area= 46 score= 218.5 dimmed
-artifacts: {'annotated': 'data/explorations/minarea20/ra76p9600_dec30p4000_diff_annotated.png', 'montage': 'data/explorations/minarea20/ra76p9600_dec30p4000_montage.png'}
+print('--- top by area ---')
+for x in sorted(c,key=lambda z:-z['area'])[:12]:
+    print(x['candidate_id'], 'row',x['row'],'col',x['column'],'w',x['width'],'h',x['height'],'area',x['area'],'score',round(x['score'],1),x['sign'])
+print('--- by score ---')
+for x in sorted(c,key=lambda z:-z['score'])[:10]:
+    print(x['candidate_id'],'area',x['area'],'score',round(x['score'],1),x['sign'],'@row',x['row'],'col',x['column'])
+from collections import Counter
+print('sign counts', Counter(x['sign'] for x in c))
+print('area hist', Counter(x['area'] for x in c).most_common(10))
+"
+region = ra76p9600_dec30p4000
+ra = 76.96
+dec = 30.4
+fov_arcmin = 24.0
+status = ok
+band = 3
+context_epoch = 2025-09-18T14:26:34.417000Z
+target_epoch = 2026-09-16T06:50:29.796000Z
+context_observation_id = live_76p9600_30p4000_level2_2025W38_2C_0023_3D3_spx_l2bv272026237
+target_observation_id = observation_003_a7b9b2d92db3
+candidate_count = 110
+--- top by area ---
+cv2-056 row 131 col 176 w 11 h 7 area 36 score 176.6 brightened
+cv2-072 row 93 col 3 w 7 h 5 area 19 score 227.3 brightened
+cv2-050 row 141 col 116 w 5 h 6 area 18 score 231.1 dimmed
+cv2-029 row 199 col 181 w 5 h 6 area 17 score 231.2 brightened
+cv2-034 row 182 col 91 w 5 h 6 area 15 score 211.7 brightened
+cv2-043 row 168 col 182 w 7 h 5 area 15 score 195.8 dimmed
+cv2-052 row 140 col 198 w 5 h 5 area 14 score 198.5 brightened
+cv2-010 row 229 col 216 w 6 h 4 area 13 score 184.0 dimmed
+cv2-042 row 169 col 106 w 5 h 4 area 12 score 231.1 brightened
+cv2-053 row 137 col 228 w 5 h 4 area 12 score 226.4 dimmed
+cv2-059 row 121 col 141 w 6 h 4 area 12 score 230.9 dimmed
+cv2-083 row 69 col 217 w 4 h 5 area 12 score 242.9 brightened
+--- by score ---
+cv2-005 area 8 score 255.0 brightened @row 237 col 92
+cv2-033 area 6 score 254.0 dimmed @row 187 col 57
+cv2-036 area 6 score 252.2 brightened @row 178 col 57
+cv2-073 area 4 score 251.9 dimmed @row 86 col 244
+cv2-028 area 6 score 251.1 brightened @row 199 col 226
+cv2-094 area 6 score 250.8 brightened @row 44 col 113
+cv2-049 area 6 score 249.8 dimmed @row 145 col 239
+cv2-066 area 6 score 248.8 brightened @row 106 col 201
+cv2-088 area 8 score 247.9 dimmed @row 56 col 121
+cv2-090 area 11 score 246.9 dimmed @row 50 col 138
+sign counts Counter({'brightened': 58, 'dimmed': 52})
+area hist [(4, 47), (6, 25), (8, 12), (10, 6), (11, 4), (12, 4), (9, 3), (15, 2), (5, 1), (13, 1)]
 [0m
-## Region exploration report — RA 76.96°, Dec +30.40°
+[0m→ [0mRead data/explorations/rerun_20261114/ra76p9600_dec30p4000_montage.png
+The run produced 109 OpenCV hits — that's a very high count, likely noise/edge artifacts. Let me read the authoritative JSON and view the montage.
+[0m
+[0m$ [0mcurl -s "http://localhost:8000/api/timeline?ra=76.96&dec=30.40&fov=24" | python3 -c "
+import json,sys
+t=json.load(sys.stdin)
+print('keys:',list(t.keys()))
+print('band',t.get('band'),'frames',len(t.get('frames') or []))
+for f in (t.get('frames') or []):
+    print(json.dumps(f))
+" 2>&1 | head -40
+keys: ['status', 'ra', 'dec', 'fov_arcmin', 'band', 'available_bands', 'frames', 'caveats', 'message']
+band 3 frames 8
+{"observation_id": "live_76p9600_30p4000_level2_2025W38_2C_0023_3D3_spx_l2bv272026237", "epoch": "2025-09-18T14:26:34.417000Z", "band": "3", "wavelength": 2.2133545875549316, "cutout_url": "/api/cutout/live_76p9600_30p4000_level2_2025W38_2C_0023_3D3_spx_l2bv272026237?ra=76.96&dec=30.4&fov=24.0&size=256&vmin=0.155325&vmax=9.60611", "source": "live", "coverage": 0.9930555555555556}
+{"observation_id": "observation_000_a4a54f5e2aff", "epoch": "2025-09-18T14:26:34.417000Z", "band": "3", "wavelength": 2.2133545875549316, "cutout_url": "/api/cutout/observation_000_a4a54f5e2aff?ra=76.96&dec=30.4&fov=24.0&size=256&vmin=0.155325&vmax=9.60611", "source": "cached", "coverage": 1.0}
+{"observation_id": "live_76p9600_30p4000_level2_2026W08_2A_0233_3D3_spx_l2bv272026227", "epoch": "2026-02-20T17:20:32.679000Z", "band": "3", "wavelength": 2.2133545875549316, "cutout_url": "/api/cutout/live_76p9600_30p4000_level2_2026W08_2A_0233_3D3_spx_l2bv272026227?ra=76.96&dec=30.4&fov=24.0&size=256&vmin=0.155325&vmax=9.60611", "source": "live", "coverage": 1.0}
+{"observation_id": "observation_001_ffd9ebbe4bba", "epoch": "2026-02-20T17:20:32.679000Z", "band": "3", "wavelength": 2.2133545875549316, "cutout_url": "/api/cutout/observation_001_ffd9ebbe4bba?ra=76.96&dec=30.4&fov=24.0&size=256&vmin=0.155325&vmax=9.60611", "source": "cached", "coverage": 1.0}
+{"observation_id": "live_76p9600_30p4000_level2_2026W10_1A_0120_1D3_spx_l2bv272026229", "epoch": "2026-03-02T13:31:14.591000Z", "band": "3", "wavelength": 2.2133545875549316, "cutout_url": "/api/cutout/live_76p9600_30p4000_level2_2026W10_1A_0120_1D3_spx_l2bv272026229?ra=76.96&dec=30.4&fov=24.0&size=256&vmin=0.155325&vmax=9.60611", "source": "live", "coverage": 1.0}
+{"observation_id": "observation_002_858716b6605e", "epoch": "2026-03-02T13:31:14.591000Z", "band": "3", "wavelength": 2.2133545875549316, "cutout_url": "/api/cutout/observation_002_858716b6605e?ra=76.96&dec=30.4&fov=24.0&size=256&vmin=0.155325&vmax=9.60611", "source": "cached", "coverage": 1.0}
+{"observation_id": "live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261", "epoch": "2026-09-16T06:50:29.796000Z", "band": "3", "wavelength": 2.2133545875549316, "cutout_url": "/api/cutout/live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261?ra=76.96&dec=30.4&fov=24.0&size=256&vmin=0.155325&vmax=9.60611", "source": "live", "coverage": 0.9930555555555556}
+{"observation_id": "observation_003_a7b9b2d92db3", "epoch": "2026-09-16T06:50:29.796000Z", "band": "3", "wavelength": 2.2133545875549316, "cutout_url": "/api/cutout/observation_003_a7b9b2d92db3?ra=76.96&dec=30.4&fov=24.0&size=256&vmin=0.155325&vmax=9.60611", "source": "cached", "coverage": 1.0}
+[0m
+The montage could not be read — this model does not support image input, so I'm relying on the JSON report (the authoritative output) as instructed. Let me pull timeline provenance and cross-check with the backend's scientific baseline.
+[0m$ [0mcurl -s -X POST "http://localhost:8000/api/analyze_region" -H 'Content-Type: application/json' -d '{"context_epoch":"2025-09-18T14:26:34.417000Z","target_epoch":"2026-09-16T06:50:29.796000Z","ra":76.96,"dec":30.40,"fov_arcmin":24,"size":256}' > data/explorations/rerun_20261114/analyze_region.json; python3 -c "
+import json
+r=json.load(open('data/explorations/rerun_20261114/analyze_region.json'))
+print('keys:',list(r.keys()))
+for k in ['status','band','candidate_count','threshold','message','error']:
+    if k in r: print(k,'=',r[k])
+c=r.get('candidates') or []
+print('n candidates',len(c))
+for x in c[:10]: print(json.dumps(x))
+"
+keys: ['detail']
+n candidates 0
+[0m
+[0m$ [0mcat data/explorations/rerun_20261114/analyze_region.json; echo; grep -rn "analyze_region" backend/ --include=*.py | head -20
+{"detail":"both observations must exist in the catalog"}
+backend/api/routes.py:630:    Distinct from /analyze_region (the noise-normalized scientific baseline).
+backend/api/routes.py:676:@router.post("/analyze_region", response_model=AnalyzeResponse)
+backend/api/routes.py:677:def analyze_region(request: AnalyzeRegionRequest) -> AnalyzeResponse:
+[0m
+[0m$ [0msed -n 660,760p backend/api/routes.py; grep -n "class AnalyzeRegionRequest" -A 15 backend/api/*.py backend/api/**/*.py 2>/dev/null | head -40
+"area": candidate["area"],
+                "score": candidate["score"],
+                "coordinate_space": candidate["coordinate_space"],
+                "classification": "unclassified_candidate",
+                "caveat": "OpenCV visual-aid candidate on a rendered difference image; not noise-normalized.",
+            }
+            for candidate in candidates
+        ],
+        caveats=[
+            "OpenCV candidates are thresholded connected components on a display render, not significance detections.",
+            "Candidates are unclassified and require scientific validation.",
+            "The rendered difference can saturate; scores are display magnitudes, not sigma.",
+        ],
+    )
 
-**Status:** OK · **FOV:** 24′ (script default; no FOV was specified) · **Cutout:** 256 px
-**Backend:** `ok`, provider `cached`, 19 observations total
 
-### Provenance / timeline
-Three epochs cover this position, all in **band 3** (λ ≈ 2.213 µm), all **source `live`**, coverage 1.0:
+@router.post("/analyze_region", response_model=AnalyzeResponse)
+def analyze_region(request: AnalyzeRegionRequest) -> AnalyzeResponse:
+    """Noise-aware change detection between two epochs at a sky position.
 
-| Role | Observation ID | Epoch |
-|---|---|---|
-| context | `live_76p9600_30p4000_level2_2026W08_2A_0233_3D3_spx_l2bv272026227` | 2026-02-20T17:20:32.679Z |
-| (unused middle) | `live_76p9600_30p4000_level2_2026W10_1A_0120_1D3_spx_l2bv272026229` | 2026-03-02T13:31:14.591Z |
-| target | `live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261` | 2026-09-16T06:50:29.796Z |
+    Unlike the legacy /analyze, this compares WCS-aligned cutouts centered on
+    the requested position, so candidate pixel coordinates land directly on
+    the same grid as the /cutout frames the user is viewing.
+    """
+    cut_a, cut_b = _aligned_pair(
+        request.context_epoch, request.target_epoch, request.ra, request.dec, request.fov_arcmin, request.size
+    )
+    significance, valid = significance_map(
+        cut_a.image, cut_a.variance, cut_a.valid_mask, cut_b.image, cut_b.variance, cut_b.valid_mask
+    )
+    difference_score = float(np.mean(np.abs(significance[valid]))) if valid.any() else 0.0
+    difference_image_url = (
+        f"/api/diff/aligned?context_epoch={request.context_epoch}&target_epoch={request.target_epoch}"
+        f"&ra={request.ra}&dec={request.dec}&fov={request.fov_arcmin}&size={request.size}"
+    )
+    candidates = _candidates_from_map(
+        np.abs(significance),
+        source="significance",
+        coordinate_space="aligned_cutout_pixel",
+        minimum_score=5.0,
+    )
+    candidates, gaia_caveats = _enrich_candidates_with_gaia(
+        candidates, request.ra, request.dec, request.fov_arcmin, request.size
+    )
+    return AnalyzeResponse(
+        status="ok",
+        context_epoch=request.context_epoch,
+        target_epoch=request.target_epoch,
+        difference_score=difference_score,
+        difference_image_url=difference_image_url,
+        candidates=candidates,
+        caveats=_ALIGNED_CAVEATS + gaia_caveats,
+    )
 
-The explorer compares the two most-separated epochs (Feb → Sep). Difference image is displayed with a shared brightness stretch, so sign is *relative to the render*, not calibrated photometry.
 
-### OpenCV pass — display-grade visual aid (NOT the scientific baseline)
-- **Default auto-threshold (Otsu, min-area 4): 379 candidates** (218 dimmed / 161 brightened).
-- This is **noise/saturation dominated**: 275/379 have area ≤ 10 px (180 are exactly 4 px), 39 are clipped at score 255. Treat the count as a threshold artifact, not 379 real changes.
-- **Stricter re-run (`--min-area 20`): 59 candidates** (39 dimmed / 20 brightened) — a more usable subset, but still display-grade.
+@router.post("/fetch_region")
+def fetch_region(
+    ra: float = Query(..., ge=0, lt=360),
+    dec: float = Query(..., ge=-90, le=90),
+) -> dict[str, Any]:
+    """Fetch time-spread SPHEREx cutouts of this position from the live IRSA archive.
 
-Largest OpenCV blobs (both passes, `coordinate_space = diff_image_pixel`, all `unclassified_candidate`):
+    Downloads only small server-side cutouts (a few MB per epoch, not the full
+    65 MB products) into the local cache; the catalog picks them up on its next
+    refresh. Bounded and polite: at most 8 frames, rate-limited, remembered in
+    a ledger so repeat requests cost nothing.
 
-| id | bbox (row,col) | w×h | area | score | sign |
+    The download runs on a background thread (a full fetch takes minutes,
+    longer than HTTP proxies keep a request open). The response is immediate;
+    repeat the same request to poll until ``status`` is ``already_fetched``
+    (success) or ``failed``.
+    """
+    from backend.storage import live_archive
+
+    result = live_archive.start_fetch(ra, dec)
+    if result["status"] == "already_fetched":
+        # New files invalidate the catalog cache so the next /timeline sees them.
+        _catalog_cache["expires_at"] = 0.0
+    return result
+
+
+def _feed_positions() -> list[tuple[float, float, str]]:
+    """Candidate feed centers: fetched regions (exact) plus coarse 1-degree cells.
+
+    Observation record centers are exposure pointings that scatter over
+    degrees between visits of one target, so grouping must not rely on them;
+    each candidate position is validated against real detector footprints
+    afterwards.
+    """
+    from backend.storage import live_archive
+
+    positions: list[tuple[float, float, str]] = []
+    for key in live_archive.list_regions():
+        try:
+            ra_text, dec_text = key.split(",")
+            positions.append((float(ra_text) % 360.0, float(dec_text), key))
+        except ValueError:
+            continue
+    for record in _catalog().values():
+        if record.ra is None or record.dec is None:
+            continue
+backend/api/schemas.py:79:class AnalyzeRegionRequest(BaseModel):
+backend/api/schemas.py-80-    """Compare two epochs on the shared north-up cutout grid at (ra, dec)."""
+backend/api/schemas.py-81-
+backend/api/schemas.py-82-    context_epoch: str
+backend/api/schemas.py-83-    target_epoch: str
+backend/api/schemas.py-84-    ra: float = Field(..., ge=0, lt=360)
+backend/api/schemas.py-85-    dec: float = Field(..., ge=-90, le=90)
+backend/api/schemas.py-86-    fov_arcmin: float = Field(default=15.0, ge=0.5, le=240.0)
+backend/api/schemas.py-87-    size: int = Field(default=256, ge=8, le=512)
+backend/api/schemas.py-88-
+backend/api/schemas.py-89-
+backend/api/schemas.py-90-class GaiaMatchResponse(BaseModel):
+backend/api/schemas.py-91-    """The nearest catalogued Gaia DR3 star to a candidate, when one exists."""
+backend/api/schemas.py-92-
+backend/api/schemas.py-93-    source_id: str
+backend/api/schemas.py-94-    separation_arcsec: float
+[0m
+The scientific baseline takes observation IDs, not timestamps. Retrying with the exact IDs the explorer used.
+[0m$ [0mcurl -s -X POST "http://localhost:8000/api/analyze_region" -H 'Content-Type: application/json' -d '{"context_epoch":"live_76p9600_30p4000_level2_2025W38_2C_0023_3D3_spx_l2bv272026237","target_epoch":"observation_003_a7b9b2d92db3","ra":76.96,"dec":30.40,"fov_arcmin":24,"size":256}' > data/explorations/rerun_20261114/analyze_region.json; python3 -c "
+import json
+r=json.load(open('data/explorations/rerun_20261114/analyze_region.json'))
+print('keys',list(r.keys()))
+for k in ['status','difference_score','detail']:
+    if k in r: print(k,'=',r[k])
+c=r.get('candidates') or []
+print('n',len(c))
+for x in c[:15]:
+    print(x.get('candidate_id'), 'x',x.get('x'),'y',x.get('y'),'w',x.get('width'),'h',x.get('height'),'score',round(x.get('score',0),2),'area',x.get('area'))
+"
+keys ['status', 'context_epoch', 'target_epoch', 'difference_score', 'difference_image_url', 'candidates', 'caveats', 'message']
+status = ok
+difference_score = 2.1186108589172363
+n 50
+significance-074 x None y None w 4 h 3 score 196.28 area 7
+significance-087 x None y None w 4 h 4 score 149.65 area 12
+significance-032 x None y None w 3 h 4 score 138.24 area 9
+significance-092 x None y None w 3 h 4 score 134.12 area 11
+significance-063 x None y None w 3 h 2 score 131.13 area 4
+significance-095 x None y None w 4 h 2 score 120.59 area 6
+significance-065 x None y None w 4 h 4 score 114.42 area 11
+significance-036 x None y None w 2 h 2 score 113.49 area 3
+significance-028 x None y None w 3 h 4 score 112.39 area 7
+significance-026 x None y None w 3 h 4 score 110.66 area 7
+significance-076 x None y None w 2 h 2 score 109.19 area 4
+significance-101 x None y None w 4 h 3 score 108.05 area 9
+significance-097 x None y None w 4 h 2 score 104.58 area 5
+significance-099 x None y None w 4 h 4 score 101.7 area 9
+significance-077 x None y None w 1 h 2 score 101.45 area 2
+[0m
+[0m$ [0mpython3 -c "
+import json
+r=json.load(open('data/explorations/rerun_20261114/analyze_region.json'))
+c=r['candidates']
+print('first candidate:'); print(json.dumps(c[0],indent=2))
+print('caveats:'); [print('-',x) for x in r.get('caveats',[])]
+print('message:',r.get('message'))
+print('count',len(c))
+import statistics
+print('score max',max(x['score'] for x in c),'median',statistics.median([x['score'] for x in c]))
+print('above 10:',sum(1 for x in c if x['score']>=10),'above 20:',sum(1 for x in c if x['score']>=20),'above 50:',sum(1 for x in c if x['score']>=50))
+"
+first candidate:
+{
+  "candidate_id": "significance-074",
+  "source": "significance",
+  "classification": "unclassified_candidate",
+  "row": 164,
+  "column": 185,
+  "height": 3,
+  "width": 4,
+  "area": 7,
+  "score": 196.2775421142578,
+  "coordinate_space": "aligned_cutout_pixel",
+  "ra": 76.852277,
+  "dec": 30.340581,
+  "gaia_match": {
+    "source_id": "156336573353358976",
+    "separation_arcsec": 2.14,
+    "g_mag": 9.410622,
+    "pm_total_mas_yr": 14.98,
+    "parallax_mas": 4.634319607301611,
+    "variable_flag": "NOT_AVAILABLE"
+  },
+  "gaia_checked": true,
+  "interpretation": "Coincides with known star Gaia DR3 156336573353358976 at 2.1\u2033 \u2014 most plausibly that star varying or drifting, not a new object.",
+  "caveat": "Candidate requires scientific validation; it is not a confirmed detection."
+}
+caveats:
+- Both epochs are resampled onto the same north-up sky grid before subtraction (display-grade alignment).
+- Candidates are regions exceeding a 5-sigma noise-normalized threshold; they are unclassified and not confirmed detections.
+- SPHEREx detectors are linear-variable filters: the same sky position can be sampled at a slightly different wavelength on each visit, which can change apparent brightness without true variability.
+- Candidates are cross-matched against the Gaia DR3 star catalog (ESA) within 10″; a match suggests a known star, not a new object.
+message: None
+count 50
+score max 196.2775421142578 median 83.7813835144043
+above 10: 50 above 20: 50 above 50: 50
+[0m
+[0m$ [0mpython3 -c "
+import json
+r=json.load(open('data/explorations/rerun_20261114/analyze_region.json'))
+c=r['candidates']
+g=sum(1 for x in c if x.get('gaia_match'))
+print('significance candidates',len(c),'with gaia match',g)
+print('top 8:')
+for x in c[:8]:
+    gm=x.get('gaia_match') or {}
+    print(x['candidate_id'],'ra',x['ra'],'dec',x['dec'],'score',round(x['score'],1),'area',x['area'],'gaia',gm.get('source_id'),'sep',gm.get('separation_arcsec'))
+o=json.load(open('data/explorations/rerun_20261114/ra76p9600_dec30p4000.json'))
+cc=o['candidates']
+edge=sum(1 for x in cc if x['row']<5 or x['column']<5 or x['row']+x['height']>251 or x['column']+x['width']>251)
+print('opencv candidates',len(cc),'near edge(<5px)',edge,'median area',sorted(x['area'] for x in cc)[len(cc)//2])
+print('opencv threshold used: auto (report has no threshold field)')
+"
+significance candidates 50 with gaia match 38
+top 8:
+significance-074 ra 76.852277 dec 30.340581 score 196.3 area 7 gaia 156336573353358976 sep 2.14
+significance-087 ra 76.850522 dec 30.291361 score 149.6 area 12 gaia 156334026436881664 sep 6.6
+significance-032 ra 77.032514 dec 30.469511 score 138.2 area 9 gaia 156430783460273536 sep 7.02
+significance-092 ra 76.858672 dec 30.285117 score 134.1 area 11 gaia 156334026436882048 sep 5.84
+significance-063 ra 76.815109 dec 30.377264 score 131.1 area 4 gaia 156339665729807616 sep 3.0
+significance-095 ra 77.087561 dec 30.28197 score 120.6 area 6 gaia 156381378452809984 sep 6.32
+significance-065 ra 76.977205 dec 30.374218 score 114.4 area 11 gaia 156429997483589120 sep 5.13
+significance-036 ra 77.114969 dec 30.45069 score 113.5 area 3 gaia 156385123664237568 sep 7.82
+opencv candidates 110 near edge(<5px) 8 median area 6
+opencv threshold used: auto (report has no threshold field)
+[0m
+## Region exploration — RA 76.96°, Dec +30.40°, FOV 24′
+
+**Backend:** `ok`, provider `cached`, 63 observations catalogued.
+**Status:** `ok` — 4 unique epochs cover the position (8 timeline frames because each epoch appears once as `live` and once as `cached`).
+
+| Field | Value |
+|---|---|
+| Band | 3 (λ ≈ 2.213 µm) |
+| Context epoch | 2025-09-18T14:26:34.417Z — `live_76p9600_30p4000_level2_2025W38_2C_0023_3D3_spx_l2bv272026237` (source: **live**) |
+| Target epoch | 2026-09-16T06:50:29.796Z — `observation_003_a7b9b2d92db3` (source: **cached**) |
+| Other available epochs | 2026-02-20T17:20Z, 2026-03-02T13:31Z |
+| Separation | ≈ 1 year (extreme pair, as the tool selects) |
+
+The script's pair mixes a live frame with a cached frame at the same position; both are band 3 and aligned onto a common grid.
+
+### OpenCV candidates (display-grade visual aid) — 110 found
+
+Detection: auto Otsu threshold (no override, no explicit threshold recorded), 3×3 morphological open, min area 4 px. **Median area is only 6 px**, and 8 candidates sit within 5 px of the frame edge — the count is dominated by small, near-saturated residual blobs, not plausible isolated sources. Signs split 58 brightened / 52 dimmed.
+
+Top by area:
+
+| candidate_id | row, col | w×h | area (px) | sign | mean score |
 |---|---|---|---|---|---|
-| cv2-316 | 41,131 | 13×25 | 115 | 224.2 | dimmed |
-| cv2-078 | 200,131 | 13×24 | 103 | 230.3 | dimmed |
-| cv2-369 | 9,11 | 12×13 | 99 | 221.8 | dimmed |
-| cv2-129 | 163,100 | 14×18 | 93 | 221.3 | dimmed |
-| cv2-261 | 80,161 | 8×25 | 68 | 230.6 | dimmed |
-| cv2-036 | 226,56 | 14×15 | 67 | 225.7 | brightened |
-| cv2-190 | 127,174 | 17×9 | 62 | 213.2 | brightened |
-| cv2-339 | 31,116 | 9×11 | 57 | 232.9 | brightened |
+| cv2-056 | 131, 176 | 11×7 | 36 | brightened | 176.6 |
+| cv2-072 | 93, 3 | 7×5 | 19 | brightened | 227.3 |
+| cv2-050 | 141, 116 | 5×6 | 18 | dimmed | 231.1 |
+| cv2-029 | 199, 181 | 5×6 | 17 | brightened | 231.2 |
+| cv2-034 | 182, 91 | 5×6 | 15 | brightened | 211.7 |
+| cv2-043 | 168, 182 | 7×5 | 15 | dimmed | 195.8 |
+| cv2-052 | 140, 198 | 5×5 | 14 | brightened | 198.5 |
+| cv2-010 | 229, 216 | 6×4 | 13 | dimmed | 184.0 |
+| cv2-042 | 169, 106 | 5×4 | 12 | brightened | 231.1 |
+| cv2-059 | 121, 141 | 6×4 | 12 | dimmed | 230.9 |
 
-### Scientific baseline cross-check — `POST /api/analyze_region`
-Same epoch pair, noise-normalized/WCS-aligned: **`difference_score = 5.32`, 50 significance candidates** (px coords in aligned cutout; scores 126.8–216.3, area 2–20). Gaia DR3 cross-match: 20 matched to catalogued stars, **30 with no Gaia match** (worth closer inspection, *not* confirmed objects).
+Highest display scores are clipped/near-saturated (255, 254, 252…) on 4–8 px blobs — a saturation artifact signature, not stronger evidence. All 110 are `unclassified_candidate`.
 
-Top candidates (scientific source):
+### Scientific baseline cross-check (`/api/analyze_region`, same epoch pair)
 
-| id | px (col,row) | area | score | RA, Dec | Gaia |
-|---|---|---|---|---|---|
-| significance-119 | 24,218 | 8 | 216.3 | 77.1445, +30.2561 | none within 10″ |
-| significance-027 | 122,53 | 6 | 211.0 | 76.9673, +30.5141 | none |
-| significance-028 | 121,58 | 6 | 207.7 | 76.9691, +30.5070 | 156434807846950912 @7.5″ |
-| significance-082 | 107,169 | 15 | 205.5 | 76.9935, +30.3297 | 156288950755957248 @6.6″ |
-| significance-064 | 206,142 | 5 | 204.7 | 76.8151, +30.3749 | none |
-| significance-031 | 87,77 | 7 | 199.7 | 77.0307, +30.4765 | none |
+- Status `ok`, mean |significance| = **2.12**, **50 candidates** at ≥5σ on the WCS-aligned, noise-normalized map.
+- **38 of 50 coincide with Gaia DR3 stars** (within 10″), so the majority are most plausibly known-star variability/drift, not new objects.
+- Top: `significance-074` at RA 76.852277, Dec 30.340581, score 196.3, area 7 px — matches Gaia DR3 156336573353358976 at 2.14″ (G=9.41, 15 mas/yr PM).
+- Other top matches: `significance-087` (149.6, Gaia sep 6.6″), `significance-032` (138.2, sep 7.0″), `significance-092` (134.1, sep 5.8″).
+
+The OpenCV pass (110) is **not** a superset or upgrade of the baseline (50); it is a lower-selectivity display threshold on rendered RGB, so it over-counts relative to the noise-normalized significance map.
 
 ### Artifacts
-- Primary report: `data/explorations/ra76p9600_dec30p4000.json`
-- Annotated diff: `data/explorations/ra76p9600_dec30p4000_diff_annotated.png`
-- Montage: `data/explorations/ra76p9600_dec30p4000_montage.png`
-- Stricter min-area-20 pass: `data/explorations/minarea20/ra76p9600_dec30p4000.{json}`, `..._diff_annotated.png`, `..._montage.png`
-- Baseline response saved: `/tmp/analyze.json`
 
-### Caveats
-- I could **not visually inspect the montage** in this session (image input unsupported); the above is derived from the authoritative JSON reports, not a visual read.
-- The 24′ FOV was a default choice. All three epochs are `live`-sourced but the running provider is `cached` (stored copies of live IRSA products).
-- OpenCV candidates are computed on **rendered PNGs**, are saturation-prone, and are a **display-grade visual aid only**. They are not the backend's noise-normalized, WCS-aligned significance detection.
-- **Standing caveat: every OpenCV candidate is an `unclassified_candidate` requiring scientific validation — never a confirmed detection.** Multi-epoch position/motion evidence and PSF/uncertainty analysis would be required before any physical interpretation.
+- Annotated diff: `data/explorations/rerun_20261114/ra76p9600_dec30p4000_diff_annotated.png`
+- Montage: `data/explorations/rerun_20261114/ra76p9600_dec30p4000_montage.png`
+- JSON report: `data/explorations/rerun_20261114/ra76p9600_dec30p4000.json`
+- Baseline response: `data/explorations/rerun_20261114/analyze_region.json`
+- Earlier runs at this position were preserved untouched under `data/explorations/` (threshold 120/200/250 and min-area variants).
+
+**Caveats:** I could not visually inspect the montage — this model does not support image input — so all counts above come from the JSON reports. The explorer's auto threshold is not written into the JSON. No `fetch_region` was needed. Sign is relative to the rendered stretch, not calibrated photometry. SPHEREx's linear-variable filters can change apparent brightness between visits without true variability.
+
+**Standing caveat:** Every OpenCV hit is an unclassified visual aid requiring scientific validation — never a confirmed detection. The `/api/analyze_region` noise-normalized result is the stronger baseline, and even its candidates remain unclassified.
