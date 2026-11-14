@@ -149,6 +149,36 @@
    "note": null,
    "source": "scroll",
    "preview_url": "/api/cutout/live_248p1600_66p7600_level2_2026W01_1A_0257_3D6_spx_l2bv272026211?ra=248.16&dec=66.76&fov=12.0&size=256"
+  },
+  {
+   "id": "9f48e4f22127",
+   "created_at": "2026-11-14T10:17:18.186630+00:00",
+   "ra": 248.16,
+   "dec": 66.76,
+   "spot_ra": 248.132259,
+   "spot_dec": 66.770685,
+   "fov_arcmin": 12.0,
+   "band": "6",
+   "observation_id": "live_248p1600_66p7600_level2_2026W01_1A_0257_3D6_spx_l2bv272026211",
+   "epoch": "2025-12-30T03:43:16.119000Z",
+   "note": null,
+   "source": "scroll",
+   "preview_url": "/api/cutout/live_248p1600_66p7600_level2_2026W01_1A_0257_3D6_spx_l2bv272026211?ra=248.16&dec=66.76&fov=12.0&size=256"
+  },
+  {
+   "id": "1cb149b5420c",
+   "created_at": "2026-11-14T10:31:16.271911+00:00",
+   "ra": 76.96,
+   "dec": 30.4,
+   "spot_ra": 76.92361,
+   "spot_dec": 30.346777,
+   "fov_arcmin": 12.0,
+   "band": "3",
+   "observation_id": "live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261",
+   "epoch": "2026-09-16T06:50:29.796000Z",
+   "note": null,
+   "source": "scroll",
+   "preview_url": "/api/cutout/live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261?ra=76.96&dec=30.4&fov=12.0&size=256"
   }
  ]
 }
