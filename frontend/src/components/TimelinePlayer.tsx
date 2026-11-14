@@ -8,7 +8,6 @@ import {
   Chip,
   CircularProgress,
   IconButton,
-  LinearProgress,
   MenuItem,
   Select,
   Slider,
@@ -115,6 +114,9 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
 
   const frames = useMemo(() => timeline?.frames ?? [], [timeline]);
   const allLoaded = frames.length > 0 && loadedCount >= frames.length;
+  // Playback only needs two frames to start; remaining frames keep preloading
+  // in the background so the user doesn't wait for the whole series.
+  const canPlay = frames.length >= 2 && loadedCount >= 2;
 
   useEffect(() => {
     let active = true;
@@ -201,8 +203,8 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
         sx={{ mb: 2 }}
       >
         <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 520 }}>
-          Each frame is a real observation of this exact spot, aligned north-up. Press play, or use
-          Blink to flip between the first and last date — anything that jumps or pulses is changing.
+          Frames are real SPHEREx observations of this position, aligned north-up and in date order.
+          Use Play to step through epochs, or Blink to alternate between the first and last.
         </Typography>
         <Stack direction="row" spacing={1}>
           <Tooltip title="Field of view: how wide a patch of sky you see (in arcminutes — the full Moon is about 31')">
@@ -381,9 +383,8 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
 
           {!allLoaded && (
             <Box sx={{ mt: 1.5, maxWidth: 640, mx: "auto" }}>
-              <LinearProgress variant="determinate" value={(loadedCount / frames.length) * 100} />
               <Typography variant="caption" color="text.secondary">
-                Loading frames… {loadedCount} of {frames.length}
+                Loading {loadedCount} of {frames.length} frames
               </Typography>
             </Box>
           )}
@@ -392,6 +393,7 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
             direction="row"
             spacing={1}
             alignItems="center"
+            justifyContent="center"
             sx={{ mt: 1.5, maxWidth: 640, mx: "auto", flexWrap: "wrap", rowGap: 1 }}
           >
             <Tooltip title="Previous date">
@@ -400,10 +402,10 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
               </IconButton>
             </Tooltip>
             <Tooltip title={playing ? "Pause" : "Play through time"}>
-              <span>
+              <span style={{ display: "inline-flex", flexShrink: 0 }}>
                 <IconButton
                   onClick={() => setPlaying((value) => !value)}
-                  disabled={frames.length < 2 || !allLoaded}
+                  disabled={!canPlay}
                   sx={{
                     color: "primary.contrastText",
                     bgcolor: "primary.main",
@@ -469,7 +471,11 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
                 </MenuItem>
               ))}
             </Select>
-            {/* Wraps onto its own full-width row when the controls fill the line. */}
+          </Stack>
+
+          {/* Frame scrubber always gets its own full-width row so the transport
+              controls never overflow horizontally on narrow screens. */}
+          <Box sx={{ mt: 1.5, maxWidth: 640, mx: "auto" }}>
             <Slider
               size="small"
               min={0}
@@ -479,9 +485,8 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
                 setPlaying(false);
                 setFrame(value as number);
               }}
-              sx={{ flex: 1, minWidth: 140, mx: 1 }}
             />
-          </Stack>
+          </Box>
 
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1.5, maxWidth: 640, mx: "auto" }}>
             {timeline?.caveats.join(" ")}

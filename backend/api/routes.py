@@ -35,7 +35,11 @@ from backend.api.schemas import (
 )
 from backend.astronomy import cutout as cutout_module
 from backend.astronomy import render
+from backend import config, storage
+from backend.api.schemas import AnalyzeRequest, AnalyzeResponse, EpochsResponse, ObservationResponse
+from backend.astronomy import compact, opencv_detection, render
 from backend.astronomy.difference import significance_map
+from backend.astronomy.fits_loader import load_fits_observation
 
 router = APIRouter(prefix="/api")
 
@@ -97,7 +101,10 @@ def _load_raw_patch(observation_id: str, row: int, column: int, size: int) -> tu
 
 def _png_response(image: Image.Image) -> Response:
     payload = BytesIO()
-    image.save(payload, format="PNG", optimize=True)
+    # `optimize=True` re-compresses PNGs at ~5x the cost for a ~3% size saving;
+    # the default zlib level is far faster and effectively identical for these
+    # smooth astronomical images.
+    image.save(payload, format="PNG", compress_level=1)
     return Response(content=payload.getvalue(), media_type="image/png")
 
 
@@ -296,7 +303,7 @@ def _cutout_png(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     payload = BytesIO()
-    Image.fromarray(rgb, mode="RGB").save(payload, format="PNG", optimize=True)
+    Image.fromarray(rgb, mode="RGB").save(payload, format="PNG", compress_level=1)
     data = payload.getvalue()
     if len(_cutout_cache) >= _CUTOUT_CACHE_LIMIT:
         _cutout_cache.pop(next(iter(_cutout_cache)))
@@ -568,6 +575,76 @@ def aligned_difference_preview(
     )
     png = Image.fromarray(render.render_difference(significance, valid), mode="RGB")
     return _png_response(png)
+
+
+@router.get("/explore/aligned")
+def explore_aligned_preview(
+    context_epoch: str,
+    target_epoch: str,
+    ra: float = Query(..., ge=0, lt=360),
+    dec: float = Query(..., ge=-90, le=90),
+    fov: float = Query(default=15.0, ge=0.5, le=240.0),
+    size: int = Query(default=256, ge=8, le=cutout_module.MAX_CUTOUT_SIZE),
+) -> Response:
+    """Difference image with OpenCV-detected candidates boxed (visual aid)."""
+    cut_a, cut_b = _aligned_pair(context_epoch, target_epoch, ra, dec, fov, size)
+    significance, valid = significance_map(
+        cut_a.image, cut_a.variance, cut_a.valid_mask, cut_b.image, cut_b.variance, cut_b.valid_mask
+    )
+    diff_rgb = render.render_difference(significance, valid)
+    candidates, _mask = opencv_detection.detect_changes(diff_rgb)
+    annotated = opencv_detection.annotate(diff_rgb, candidates)
+    return _png_response(Image.fromarray(annotated, mode="RGB"))
+
+
+@router.post("/explore_region", response_model=AnalyzeResponse)
+def explore_region(request: AnalyzeRegionRequest) -> AnalyzeResponse:
+    """OpenCV change detection on the rendered difference image (visual aid).
+
+    Distinct from /analyze_region (the noise-normalized scientific baseline).
+    Candidates here are thresholded connected components on a display render,
+    not significance detections.
+    """
+    cut_a, cut_b = _aligned_pair(
+        request.context_epoch, request.target_epoch, request.ra, request.dec, request.fov_arcmin, request.size
+    )
+    significance, valid = significance_map(
+        cut_a.image, cut_a.variance, cut_a.valid_mask, cut_b.image, cut_b.variance, cut_b.valid_mask
+    )
+    diff_rgb = render.render_difference(significance, valid)
+    candidates, _mask = opencv_detection.detect_changes(diff_rgb)
+    annotated_url = (
+        f"/api/explore/aligned?context_epoch={request.context_epoch}&target_epoch={request.target_epoch}"
+        f"&ra={request.ra}&dec={request.dec}&fov={request.fov_arcmin}&size={request.size}"
+    )
+    return AnalyzeResponse(
+        status="ok",
+        context_epoch=request.context_epoch,
+        target_epoch=request.target_epoch,
+        difference_score=None,
+        difference_image_url=annotated_url,
+        candidates=[
+            {
+                "candidate_id": candidate["candidate_id"],
+                "source": "opencv",
+                "row": candidate["row"],
+                "column": candidate["column"],
+                "height": candidate["height"],
+                "width": candidate["width"],
+                "area": candidate["area"],
+                "score": candidate["score"],
+                "coordinate_space": candidate["coordinate_space"],
+                "classification": "unclassified_candidate",
+                "caveat": "OpenCV visual-aid candidate on a rendered difference image; not noise-normalized.",
+            }
+            for candidate in candidates
+        ],
+        caveats=[
+            "OpenCV candidates are thresholded connected components on a display render, not significance detections.",
+            "Candidates are unclassified and require scientific validation.",
+            "The rendered difference can saturate; scores are display magnitudes, not sigma.",
+        ],
+    )
 
 
 @router.post("/analyze_region", response_model=AnalyzeResponse)

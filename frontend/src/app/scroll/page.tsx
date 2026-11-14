@@ -67,7 +67,7 @@ function OrbitAvatar() {
         height: 34,
         borderRadius: "50%",
         p: "2px",
-        background: `conic-gradient(${nasa.red}, #ffb74d, ${nasa.red})`,
+        background: `conic-gradient(${nasa.red}, ${nasa.blue}, ${nasa.red})`,
         display: "grid",
         placeItems: "center",
         flexShrink: 0,
@@ -396,8 +396,26 @@ function ReelCard({
               pointerEvents: "none",
             }}
           >
+            <Stack direction="row" spacing={1} alignItems="center">
+              <OrbitAvatar />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{ color: "#fff", fontWeight: 800, fontSize: 13, lineHeight: 1.2, textShadow: "0 1px 4px #000" }}>
+                  SPHEREx infrared sky
+                </Typography>
+                <Typography sx={{ color: "#c3cdd9", fontSize: 11, textShadow: "0 1px 4px #000" }}>
+                  NASA/IPAC IRSA archive · real observations
+                </Typography>
+              </Box>
+              {date && (
+                <Chip
+                  size="small"
+                  label={date}
+                  sx={{ bgcolor: "rgba(0,0,0,.6)", color: "#fff", fontWeight: 700, fontSize: 11 }}
+                />
+              )}
+            </Stack>
             {frames && frames.length > 0 && (
-              <Stack direction="row" spacing={0.5} sx={{ mb: 1 }}>
+              <Stack direction="row" spacing={0.5} sx={{ mt: 1 }}>
                 {frames.map((_, segment) => (
                   <Box
                     key={segment}
@@ -420,24 +438,6 @@ function ReelCard({
                 ))}
               </Stack>
             )}
-            <Stack direction="row" spacing={1} alignItems="center">
-              <OrbitAvatar />
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography sx={{ color: "#fff", fontWeight: 800, fontSize: 13, lineHeight: 1.2, textShadow: "0 1px 4px #000" }}>
-                  SPHEREx infrared sky
-                </Typography>
-                <Typography sx={{ color: "#c3cdd9", fontSize: 11, textShadow: "0 1px 4px #000" }}>
-                  NASA/IPAC IRSA archive · real observations
-                </Typography>
-              </Box>
-              {date && (
-                <Chip
-                  size="small"
-                  label={date}
-                  sx={{ bgcolor: "rgba(0,0,0,.6)", color: "#fff", fontWeight: 700, fontSize: 11 }}
-                />
-              )}
-            </Stack>
           </Box>
 
           {/* ——— Bottom chrome: caption like a post ——— */}
@@ -459,7 +459,10 @@ function ReelCard({
             </Typography>
             <Typography sx={{ color: "#c3cdd9", fontSize: 12, textShadow: "0 1px 4px #000" }}>
               {item.n_frames} observations{item.band ? ` · detector ${item.band}` : ""} · patch {index + 1} of {total}
-              {spot ? " · spot pinned — flag it →" : ""}
+              {spot ? " · spot pinned" : ""}
+            </Typography>
+            <Typography sx={{ color: "#7fb8ff", fontSize: 11, mt: 0.5, textShadow: "0 1px 4px #000" }}>
+              #SPHEREx #infraredSky #spaceApps
             </Typography>
           </Box>
 
@@ -618,7 +621,7 @@ function ReelCard({
             fullWidth
             size="small"
             label="What looks odd? (optional)"
-            placeholder="e.g. dot jumps between the last two dates"
+            placeholder="e.g. object moves between the last two dates"
             value={note}
             onChange={(event) => setNote(event.target.value)}
             inputProps={{ maxLength: 500 }}
