@@ -10,8 +10,8 @@ import DiscoveryPanel from "@/components/DiscoveryPanel";
 import { motion } from "framer-motion";
 import { featuredTargets } from "@/data/featuredTargets";
 
-const DEFAULT_RA = 84.4295;
-const DEFAULT_DEC = -6.9095;
+const DEFAULT_RA = 1.2184;
+const DEFAULT_DEC = -1.3642;
 
 export default function Home() {
   const [observations, setObservations] = useState<Observation[]>([]);

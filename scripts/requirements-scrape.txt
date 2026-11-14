@@ -1,0 +1,3 @@
+# Minimal dependencies for the IRSA -> Supabase scraper (no torch needed).
+numpy>=1.26
+astropy>=6.0
