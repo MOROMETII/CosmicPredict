@@ -129,13 +129,15 @@ def scrape(
             continue
 
         header = parsed["provenance"]
+        detector = header.get("DETECTOR")
         record: dict[str, Any] = {
             "observation_id": Path(filename).stem,
             "source_url": item.get("source_url"),
             "query_url": item.get("query_url"),
             "retrieved_at": item.get("retrieved_at"),
             "epoch": _iso_epoch(header.get("DATE-OBS")),
-            "band": header.get("BAND") or band,
+            "band": str(detector) if detector is not None else band,
+            "wavelength": header.get("WAVELENGTH"),
             "ra": header.get("CRVAL1"),
             "dec": header.get("CRVAL2"),
             "header": header,

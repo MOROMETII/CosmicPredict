@@ -24,13 +24,17 @@ def _epoch_from_header(header: dict[str, Any]) -> str | None:
 def _record_from_path(path: Path) -> dict[str, Any]:
     observation = load_fits_observation(path)
     header = observation.header
+    detector = header.get("DETECTOR")
+    band = str(detector) if detector is not None else header.get("BAND")
+    wavelength = header.get("WAVELENGTH")
     return {
         "observation_id": path.stem,
         "source_url": None,
         "query_url": None,
         "retrieved_at": None,
         "epoch": _epoch_from_header(header),
-        "band": header.get("BAND"),
+        "band": band,
+        "wavelength": wavelength,
         "ra": header.get("CRVAL1"),
         "dec": header.get("CRVAL2"),
         "header": header,

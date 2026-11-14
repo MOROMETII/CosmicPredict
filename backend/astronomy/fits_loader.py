@@ -9,6 +9,17 @@ from typing import Any
 import numpy as np
 from astropy.io import fits
 
+# FLAGS bits that mark unusable pixels (detector defects and processing
+# artifacts). The SOURCE bit (21) and FULLSAMPLE bit (12) are intentionally
+# NOT masked: they mark real astronomical detections, not defects. Masking them
+# would punch "holes" where stars and galaxies are.
+_BAD_FLAG_BITS = (0, 1, 2, 4, 5, 6, 7, 9, 10, 11, 14, 15, 17, 19, 22, 23, 24, 26, 27, 28)
+_BAD_FLAG_MASK = sum(1 << bit for bit in _BAD_FLAG_BITS)
+
+
+def _flags_are_bad(flags: np.ndarray) -> np.ndarray:
+    return (np.asarray(flags) & _BAD_FLAG_MASK) != 0
+
 
 @dataclass(frozen=True)
 class FitsObservation:
@@ -50,8 +61,23 @@ def _header_metadata(header: fits.Header) -> dict[str, Any]:
         "BUNIT",
         "TELESCOP",
         "INSTRUME",
+        "DETECTOR",
     )
     return {key: header[key] for key in keys if key in header}
+
+
+def _wavelength_from_wave(hdul: fits.HDUList) -> float | None:
+    """Return the representative central wavelength (microns) from WCS-WAVE."""
+    try:
+        table = hdul["WCS-WAVE"].data
+        values = np.asarray(table["VALUES"])
+        wavelengths = values[..., 0]
+        finite = wavelengths[np.isfinite(wavelengths)]
+        if finite.size:
+            return float(np.median(finite))
+    except (KeyError, IndexError, TypeError, ValueError):
+        pass
+    return None
 
 
 def load_fits_observation(
@@ -96,13 +122,17 @@ def load_fits_observation(
             if variance is not None:
                 valid_mask &= np.isfinite(variance) & (variance > 0)
             if flags is not None:
-                valid_mask &= flags == 0
+                valid_mask &= ~_flags_are_bad(flags)
+            header = _header_metadata(science_hdu.header)
+            wavelength = _wavelength_from_wave(hdul)
+            if wavelength is not None:
+                header["WAVELENGTH"] = wavelength
             return FitsObservation(
                 path=file_path,
                 image=image,
                 variance=variance,
                 flags=flags,
-                header=_header_metadata(science_hdu.header),
+                header=header,
                 valid_mask=valid_mask,
             )
     except (OSError, ValueError, TypeError) as error:
