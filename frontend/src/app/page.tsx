@@ -71,7 +71,9 @@ const toObservation = (frame: TimelineFrame): Observation => ({
   dec: null,
   source: frame.source,
   provenance: {},
-  image_url: `/api/images/${frame.observation_id}/preview`,
+  // Use the north-up aligned cutout (same sky grid for both epochs), not the
+  // full-detector preview, so the two frames actually overlay for the 3-D view.
+  image_url: frame.cutout_url,
   asset_status: "preview_available",
 });
 
@@ -697,10 +699,11 @@ export default function Home() {
         <Paper sx={{ p: { xs: 2, md: 3 }, mb: 3 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
             <Box>
-              <Typography variant="h6">Experimental: 3-D brightness relief</Typography>
+              <Typography variant="h6">Experimental: 3-D star field</Typography>
               <Typography variant="body2" color="text.secondary">
-                The two full detector images as a landscape where height is brightness — a visual aid,
-                not a measurement. The slider shows a synthetic blend, never a real observation.
+                Real sources detected in the aligned SPHEREx cutouts, placed at their true sky
+                positions and colored by the image&apos;s infrared-wavelength tint. Depth is a visual aid
+                (brightness → parallax), not a physical distance. WASD to move, drag to look.
               </Typography>
             </Box>
             <Button endIcon={show3d ? <ExpandLess /> : <ExpandMore />} onClick={() => setShow3d((value) => !value)}>
@@ -717,7 +720,7 @@ export default function Home() {
               />
               <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 1 }}>
                 <Typography variant="caption" sx={{ minWidth: 110 }} color="text.secondary">
-                  Synthetic blend A to B
+                  Crossfade A to B
                 </Typography>
                 <Slider size="small" value={morph} onChange={(_, value) => setMorph(value as number)} sx={{ maxWidth: 320 }} />
               </Stack>

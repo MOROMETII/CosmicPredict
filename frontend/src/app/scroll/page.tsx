@@ -31,6 +31,7 @@ import {
   Speed,
   StarBorder,
   TravelExplore,
+  VerticalAlignBottom,
 } from "@mui/icons-material";
 import {
   createMark,
@@ -55,6 +56,9 @@ const SPEEDS = [
   { label: "1×", ms: 700 },
   { label: "2×", ms: 350 },
 ];
+
+/** Autoscroll dwell: how long each reel stays before advancing. */
+const AUTOSCROLL_MS = 5000;
 
 type TapSpot = { xFrac: number; yFrac: number };
 
@@ -671,6 +675,25 @@ export default function ScrollPage() {
     setTutorialForced(false);
   }, []);
 
+  // Autoscroll: advance to the next reel on a timer. Pauses when the user
+  // manually scrolls, taps a card, or opens the tutorial; loops at the end.
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const [autoscroll, setAutoscroll] = useState(false);
+
+  useEffect(() => {
+    if (!autoscroll || !items || items.length === 0 || tutorialOpen) return;
+    const timer = window.setInterval(() => {
+      const host = scrollerRef.current;
+      if (!host) return;
+      const currentIndex = Math.round(host.scrollTop / host.clientHeight);
+      const next = (currentIndex + 1) % items.length;
+      host.scrollTo({ top: next * host.clientHeight, behavior: "smooth" });
+    }, AUTOSCROLL_MS);
+    return () => window.clearInterval(timer);
+  }, [autoscroll, items, tutorialOpen]);
+
+  const pauseAutoscroll = useCallback(() => setAutoscroll(false), []);
+
   useEffect(() => {
     getFeed()
       .then((feed) => {
@@ -724,6 +747,15 @@ export default function ScrollPage() {
           </Box>
         </Stack>
         <Stack direction="row" spacing={0.5} sx={{ pointerEvents: "auto" }} alignItems="center">
+          <Tooltip title={autoscroll ? "Pause autoscroll" : "Autoscroll through the feed"}>
+            <IconButton
+              onClick={() => setAutoscroll((value) => !value)}
+              sx={{ color: autoscroll ? "#ffb74d" : "#8b97a8" }}
+              aria-label="Toggle autoscroll"
+            >
+              {autoscroll ? <Pause /> : <VerticalAlignBottom />}
+            </IconButton>
+          </Tooltip>
           <Tooltip title="How Sky Scroll works">
             <IconButton onClick={() => setTutorialForced(true)} sx={{ color: "#8b97a8" }} aria-label="Open tutorial">
               <HelpOutline />
@@ -765,7 +797,11 @@ export default function ScrollPage() {
       )}
 
       {items !== null && items.length > 0 && (
-        <Box sx={{ height: "100dvh", overflowY: "auto", scrollSnapType: "y mandatory" }}>
+        <Box
+          ref={scrollerRef}
+          onPointerDown={pauseAutoscroll}
+          sx={{ height: "100dvh", overflowY: "auto", scrollSnapType: "y mandatory" }}
+        >
           {items.map((item, index) => (
             <ReelCard
               key={`${item.region_key}-${item.ra}-${item.dec}`}

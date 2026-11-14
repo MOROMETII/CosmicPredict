@@ -13,16 +13,19 @@ type Props = {
   candidates: Candidate[];
 };
 
-const STAR_COUNT = 2200;
+const MAX_STARS = 2500;
+const MIN_STAR_LUM = 0.08; // relative brightness threshold for a "detected" source
 const FIELD_RADIUS = 9;
 const MOVE_SPEED = 2.4;
 const LOOK_SPEED = 2.2;
 
 /**
- * A navigable 3-D star field derived from the observation brightness map.
- * Each star is a point whose depth (z) and size follow its intensity, so
- * moving through the field with WASD reveals parallax. This is a visual aid,
- * not a physical reconstruction of the sky.
+ * A navigable 3-D star field built from the *real* observation, not synthetic
+ * points. We detect local brightness maxima in the rendered SPHEREx cutout —
+ * i.e. actual sources — and place one point per star at its true sky position,
+ * colored by the image's wavelength-tinted pixel and sized by its real
+ * intensity. The depth (z) axis is a visual aid (brightness → parallax), not a
+ * physical distance; the sky itself is 2-D in these cutouts.
  */
 export default function SpaceProjection({ first, second, amount, candidates }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -62,26 +65,13 @@ export default function SpaceProjection({ first, second, amount, candidates }: P
     host.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Point cloud.
+    // Point cloud (positions/colors filled from real source detection).
     const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(STAR_COUNT * 3);
-    const colors = new Float32Array(STAR_COUNT * 3);
-    for (let i = 0; i < STAR_COUNT; i++) {
-      const theta = Math.random() * Math.PI * 2;
-      const radius = Math.pow(Math.random(), 0.5) * FIELD_RADIUS;
-      positions[i * 3] = Math.cos(theta) * radius;
-      positions[i * 3 + 1] = (Math.random() * 2 - 1) * FIELD_RADIUS * 0.55;
-      positions[i * 3 + 2] = Math.sin(theta) * radius;
-      const tint = 0.6 + Math.random() * 0.4;
-      colors[i * 3] = tint;
-      colors[i * 3 + 1] = tint * (0.82 + Math.random() * 0.18);
-      colors[i * 3 + 2] = Math.min(1, tint * 0.9 + 0.1);
-    }
-    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(0), 3));
+    geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(0), 3));
 
     const material = new THREE.PointsMaterial({
-      size: 0.035,
+      size: 0.03,
       vertexColors: true,
       sizeAttenuation: true,
       transparent: true,
@@ -168,8 +158,8 @@ export default function SpaceProjection({ first, second, amount, candidates }: P
     };
   }, []);
 
-  // Rebuild the star field from the blended observation brightness whenever
-  // the epoch mix changes.
+  // Detect real sources in the blended observation and build the point cloud
+  // from their actual sky positions and intensities.
   useEffect(() => {
     const points = pointsRef.current;
     if (!points) return;
@@ -186,39 +176,74 @@ export default function SpaceProjection({ first, second, amount, candidates }: P
 
     const render = () => {
       if ((imageA && !loaded[0]) || (imageB && !loaded[1])) return;
+      const size = 256;
       const canvas = document.createElement("canvas");
-      canvas.width = 256;
-      canvas.height = 256;
+      canvas.width = size;
+      canvas.height = size;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       if (loaded[0]) {
         ctx.globalAlpha = imageB ? 1 - amount : 1;
-        ctx.drawImage(loaded[0], 0, 0, 256, 256);
+        ctx.drawImage(loaded[0], 0, 0, size, size);
       }
       if (loaded[1]) {
         ctx.globalAlpha = imageA ? amount : 1;
-        ctx.drawImage(loaded[1], 0, 0, 256, 256);
+        ctx.drawImage(loaded[1], 0, 0, size, size);
       }
       ctx.globalAlpha = 1;
-      const data = ctx.getImageData(0, 0, 256, 256).data;
+      const data = ctx.getImageData(0, 0, size, size).data;
+
+      // Luminance map (0..1) over the rendered frame.
+      const lum = new Float32Array(size * size);
+      for (let p = 0; p < size * size; p++) {
+        lum[p] = (data[p * 4] + data[p * 4 + 1] + data[p * 4 + 2]) / 3 / 255;
+      }
+
+      // Detect local brightness maxima (real sources): a pixel brighter than
+      // its 8 neighbours and above the threshold. This yields one point per
+      // star rather than a filled blob, and only at true source locations.
+      const detections: { x: number; y: number; lum: number }[] = [];
+      for (let y = 1; y < size - 1; y++) {
+        for (let x = 1; x < size - 1; x++) {
+          const c = lum[y * size + x];
+          if (c < MIN_STAR_LUM) continue;
+          if (
+            c >= lum[(y - 1) * size + (x - 1)] &&
+            c >= lum[(y - 1) * size + x] &&
+            c >= lum[(y - 1) * size + (x + 1)] &&
+            c >= lum[y * size + (x - 1)] &&
+            c >= lum[y * size + (x + 1)] &&
+            c >= lum[(y + 1) * size + (x - 1)] &&
+            c >= lum[(y + 1) * size + x] &&
+            c >= lum[(y + 1) * size + (x + 1)]
+          ) {
+            detections.push({ x, y, lum: c });
+          }
+        }
+      }
+      // Keep the brightest sources so the field stays readable.
+      detections.sort((a, b) => b.lum - a.lum);
+      const stars = detections.slice(0, MAX_STARS);
+
+      const positions = new Float32Array(stars.length * 3);
+      const colors = new Float32Array(stars.length * 3);
+      for (let i = 0; i < stars.length; i++) {
+        const { x, y, lum: brightness } = stars[i];
+        const fx = x / size;
+        const fy = y / size;
+        const idx = (y * size + x) * 4;
+        const depth = -2.5 + brightness * 7;
+        positions[i * 3] = (fx - 0.5) * FIELD_RADIUS;
+        positions[i * 3 + 1] = (0.5 - fy) * FIELD_RADIUS * 0.62;
+        positions[i * 3 + 2] = depth;
+        colors[i * 3] = data[idx] / 255;
+        colors[i * 3 + 1] = data[idx + 1] / 255;
+        colors[i * 3 + 2] = data[idx + 2] / 255;
+      }
 
       const geometry = points.geometry as THREE.BufferGeometry;
-      const positions = geometry.getAttribute("position") as THREE.BufferAttribute;
-      const colors = geometry.getAttribute("color") as THREE.BufferAttribute;
-      for (let i = 0; i < STAR_COUNT; i++) {
-        const x = Math.random();
-        const y = Math.random();
-        const px = Math.floor(x * 256);
-        const py = Math.floor(y * 256);
-        const idx = (py * 256 + px) * 4;
-        const lum = (data[idx] + data[idx + 1] + data[idx + 2]) / 3 / 255;
-        const depth = -2.5 + lum * 7;
-        positions.setXYZ(i, (x - 0.5) * FIELD_RADIUS, (0.5 - y) * FIELD_RADIUS * 0.62, depth);
-        const tint = 0.5 + lum * 0.55;
-        colors.setXYZ(i, tint, tint * 0.9, Math.min(1, tint + 0.12));
-      }
-      positions.needsUpdate = true;
-      colors.needsUpdate = true;
+      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     };
 
     if (imageA) {
@@ -322,7 +347,7 @@ export default function SpaceProjection({ first, second, amount, candidates }: P
         }}
       >
         <Stack direction="row" spacing={1} sx={{ position: "absolute", top: 14, left: 14, pointerEvents: "none", zIndex: 1 }}>
-          <Chip label="3-D star field" size="small" sx={{ bgcolor: "rgba(5,7,8,.82)", color: cosmicColors.accent, border: `1px solid ${cosmicColors.accentStrong}` }} />
+          <Chip label="3-D star field · real sources" size="small" sx={{ bgcolor: "rgba(5,7,8,.82)", color: cosmicColors.accent, border: `1px solid ${cosmicColors.accentStrong}` }} />
           {candidates.length > 0 && <Chip label={`${candidates.length} flagged regions`} size="small" sx={{ bgcolor: "rgba(5,7,8,.82)", color: cosmicColors.danger }} />}
         </Stack>
         <Typography variant="caption" sx={{ position: "absolute", bottom: 12, left: 14, color: cosmicColors.muted, pointerEvents: "none", zIndex: 1 }}>
