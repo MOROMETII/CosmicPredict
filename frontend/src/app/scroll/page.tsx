@@ -67,7 +67,7 @@ function OrbitAvatar() {
         height: 34,
         borderRadius: "50%",
         p: "2px",
-        background: `conic-gradient(${nasa.red}, #ffb74d, ${nasa.red})`,
+        background: `conic-gradient(${nasa.red}, ${nasa.blue}, ${nasa.red})`,
         display: "grid",
         placeItems: "center",
         flexShrink: 0,
@@ -459,7 +459,7 @@ function ReelCard({
             </Typography>
             <Typography sx={{ color: "#c3cdd9", fontSize: 12, textShadow: "0 1px 4px #000" }}>
               {item.n_frames} observations{item.band ? ` · detector ${item.band}` : ""} · patch {index + 1} of {total}
-              {spot ? " · spot pinned — flag it →" : ""}
+              {spot ? " · spot pinned" : ""}
             </Typography>
             <Typography sx={{ color: "#7fb8ff", fontSize: 11, mt: 0.5, textShadow: "0 1px 4px #000" }}>
               #SPHEREx #infraredSky #spaceApps
@@ -621,7 +621,7 @@ function ReelCard({
             fullWidth
             size="small"
             label="What looks odd? (optional)"
-            placeholder="e.g. dot jumps between the last two dates"
+            placeholder="e.g. object moves between the last two dates"
             value={note}
             onChange={(event) => setNote(event.target.value)}
             inputProps={{ maxLength: 500 }}
