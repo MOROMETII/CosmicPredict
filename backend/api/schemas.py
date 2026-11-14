@@ -152,6 +152,12 @@ class FeedItem(BaseModel):
     band: str | None = None
     n_frames: int
     region_key: str  # which cached region this tile belongs to
+    score: int = 0  # social engagement score (flags + comments + gifs + people + saves)
+    flags: int = 0
+    comments: int = 0
+    gifs: int = 0
+    people: int = 0
+    saves: int = 0
 
 
 class FeedResponse(BaseModel):
@@ -172,6 +178,7 @@ class MarkCreateRequest(BaseModel):
     epoch: str | None = Field(default=None, max_length=64)
     note: str | None = Field(default=None, max_length=500)
     source: str = Field(default="scroll", max_length=32)
+    region_key: str | None = Field(default=None, max_length=64)
     # Fractional position of the tapped spot inside the displayed frame.
     x_frac: float | None = Field(default=None, ge=0.0, le=1.0)
     y_frac: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -190,6 +197,7 @@ class MarkResponse(BaseModel):
     epoch: str | None = None
     note: str | None = None
     source: str = "scroll"
+    region_key: str | None = None
     preview_url: str | None = None
     caveat: str = "A flag is a personal bookmark for review — not a detection or a confirmed anomaly."
 
@@ -240,6 +248,45 @@ class GifsResponse(BaseModel):
     status: str
     query: str
     gifs: list[GifResponse] = Field(default_factory=list)
+
+
+class SaveCreateRequest(BaseModel):
+    """A double-tap "save" (like) on a sky region."""
+
+    region_key: str = Field(..., max_length=64)
+
+
+class SaveResponse(BaseModel):
+    id: str
+    region_key: str
+    created_at: str
+
+
+class SavesResponse(BaseModel):
+    status: str
+    region_key: str
+    count: int
+    saved: bool = False
+
+
+class SurveyItem(BaseModel):
+    """One region's engagement ranking entry."""
+
+    region_key: str
+    ra: float
+    dec: float
+    score: int
+    flags: int
+    comments: int
+    gifs: int
+    people: int
+    saves: int
+
+
+class SurveyResponse(BaseModel):
+    status: str
+    regions: list[SurveyItem] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
 
 
 class AnalyzeResponse(BaseModel):

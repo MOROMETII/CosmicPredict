@@ -32,6 +32,11 @@ from backend.api.schemas import (
     GaiaSourceResponse,
     GifResponse,
     GifsResponse,
+    SaveCreateRequest,
+    SaveResponse,
+    SavesResponse,
+    SurveyItem,
+    SurveyResponse,
     MarkCreateRequest,
     MarkResponse,
     MarksResponse,
@@ -746,6 +751,15 @@ def fetch_region(
     return result
 
 
+def _interaction_count() -> int:
+    """Total social interactions, used to bust the feed cache when scoring changes."""
+    from backend.storage import comments as comments_store
+    from backend.storage import marks as marks_store
+    from backend.storage import saves as saves_store
+
+    return len(marks_store.list_marks()) + len(comments_store.list_comments_all()) + len(saves_store.list_saves())
+
+
 def _feed_positions() -> list[tuple[float, float, str]]:
     """Candidate feed centers: fetched regions (exact) plus coarse 1-degree cells.
 
@@ -788,11 +802,14 @@ def feed(
     are interleaved so scrolling varies, and offset tiles show more of each
     region than just its center.
     """
-    cache_key = (len(_catalog()), fov, limit)
+    cache_key = (len(_catalog()), fov, limit, _interaction_count())
     cached = _feed_cache.get(cache_key)
     if cached is not None:
         return cached
 
+    from backend.storage import scoring
+
+    scores = scoring.all_scores()
     records = list(_catalog().values())
     half_fov_deg = fov / 60.0 / 2.0
     per_region: list[list[FeedItem]] = []
@@ -829,12 +846,16 @@ def feed(
                     band=band,
                     n_frames=len(covering),
                     region_key=key,
+                    **scores.get(key, {"score": 0, "flags": 0, "comments": 0, "gifs": 0, "people": 0, "saves": 0}),
                 )
             )
         if items:
             per_region.append(items)
 
-    # Interleave regions so consecutive tiles are usually different sky.
+    # Order regions by engagement score (highest first), then interleave the
+    # offset tiles within each region so scrolling varies without hiding the
+    # higher-scoring regions behind lower ones.
+    per_region.sort(key=lambda items: items[0].score, reverse=True)
     interleaved: list[FeedItem] = []
     while per_region and len(interleaved) < limit:
         for items in list(per_region):
@@ -849,6 +870,7 @@ def feed(
         caveats=[
             "Every tile replays real SPHEREx observations; nothing in the feed is synthetic.",
             "Tiles come from the locally cached regions — fetch more positions to grow the feed.",
+            "Ordering reflects social engagement (flags, comments, GIFs, people), not scientific significance.",
         ],
         message=None if interleaved else "No cached region has two epochs yet. Fetch a position from the archive first.",
     )
@@ -899,6 +921,7 @@ def create_mark(request: MarkCreateRequest) -> MarkResponse:
             "epoch": request.epoch,
             "note": note or None,
             "source": request.source,
+            "region_key": request.region_key,
             "preview_url": preview_url,
         }
     )
@@ -941,6 +964,69 @@ def create_comment(request: CommentCreateRequest) -> CommentResponse:
         gif_title=request.gif_title,
     )
     return CommentResponse(**comment)
+
+
+@router.post("/saves", response_model=SaveResponse)
+def create_save(request: SaveCreateRequest) -> SaveResponse:
+    """Record a double-tap save (like) on a sky region."""
+    from backend.storage import saves as saves_store
+
+    save = saves_store.add_save(request.region_key)
+    return SaveResponse(**save)
+
+
+@router.get("/saves", response_model=SavesResponse)
+def get_saves(region_key: str = Query(..., max_length=64)) -> SavesResponse:
+    """How many times this sky region has been saved (liked)."""
+    from backend.storage import saves as saves_store
+
+    return SavesResponse(
+        status="ok",
+        region_key=region_key,
+        count=saves_store.count_saves(region_key),
+    )
+
+
+@router.get("/survey", response_model=SurveyResponse)
+def survey() -> SurveyResponse:
+    """Engagement ranking of every sky region with any interaction.
+
+    Regions are ranked by their social score (flags + comments + GIFs + people
+    + saves), highest first. This is a social-engagement leaderboard, not a
+    scientific ranking: a high score means people talked about it, not that the
+    sky there is objectively more interesting.
+    """
+    from backend.storage import scoring
+
+    items: list[SurveyItem] = []
+    for region_key, breakdown in scoring.all_scores().items():
+        try:
+            ra_text, dec_text = region_key.split(",", 1)
+            ra, dec = float(ra_text) % 360.0, float(dec_text)
+        except ValueError:
+            continue
+        items.append(
+            SurveyItem(
+                region_key=region_key,
+                ra=ra,
+                dec=dec,
+                score=breakdown["score"],
+                flags=breakdown["flags"],
+                comments=breakdown["comments"],
+                gifs=breakdown["gifs"],
+                people=breakdown["people"],
+                saves=breakdown["saves"],
+            )
+        )
+    items.sort(key=lambda item: item.score, reverse=True)
+    return SurveyResponse(
+        status="ok" if items else "empty",
+        regions=items,
+        caveats=[
+            "This is a social-engagement leaderboard, not a scientific ranking.",
+            "Score = 5·flags + 2·comments + 1·gifs + 3·people + 1·saves.",
+        ],
+    )
 
 
 # Curated fallback GIFs (Giphy media CDN URLs) used when no Giphy API key is

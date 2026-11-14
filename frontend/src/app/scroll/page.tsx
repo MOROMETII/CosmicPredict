@@ -24,9 +24,12 @@ import {
   BookmarkAdd,
   Bookmarks,
   Close,
+  Favorite,
   HelpOutline,
+  Leaderboard,
   Pause,
   PlayArrow,
+  RocketLaunch,
   Share,
   Speed,
   StarBorder,
@@ -38,10 +41,13 @@ import {
   getFeed,
   getGaiaOverlay,
   getMarks,
+  getSurvey,
   getTimeline,
   resolveAssetUrl,
+  saveRegion,
   type FeedItem,
   type GaiaOverlay,
+  type Survey,
   type TimelineFrame,
 } from "@/services/api";
 import { nasa } from "@/theme";
@@ -249,6 +255,7 @@ function ReelCard({
         epoch: active?.epoch ?? null,
         note: markNote,
         source: "scroll",
+        region_key: item.region_key,
         x_frac: tapSpot?.xFrac ?? null,
         y_frac: tapSpot?.yFrac ?? null,
       });
@@ -257,15 +264,15 @@ function ReelCard({
     [item, active, onFlagged],
   );
 
-  /** Double-tap: instant flag at the tapped spot, Instagram-like burst. */
-  const quickFlag = useCallback(
+  /** Double-tap: save (like) the region — Instagram-style heart burst. */
+  const quickSave = useCallback(
     (tapSpot: TapSpot) => {
       setSpot(tapSpot);
       setBurst(true);
       window.setTimeout(() => setBurst(false), 750);
-      saveMark(tapSpot, null).catch(() => onToast("Could not save the flag — is the backend running?"));
+      saveRegion(item.region_key).catch(() => onToast("Could not save — is the backend running?"));
     },
-    [saveMark, onToast],
+    [item.region_key, onToast],
   );
 
   const onPointerDown = useCallback(() => {
@@ -293,13 +300,13 @@ function ReelCard({
       if (now - lastTapRef.current < DOUBLE_TAP_MS) {
         lastTapRef.current = 0;
         if (singleTapTimerRef.current) window.clearTimeout(singleTapTimerRef.current);
-        quickFlag(tapSpot);
+        quickSave(tapSpot);
         return;
       }
       lastTapRef.current = now;
       singleTapTimerRef.current = window.setTimeout(() => setSpot(tapSpot), DOUBLE_TAP_MS);
     },
-    [quickFlag],
+    [quickSave],
   );
 
   const cancelHold = useCallback(() => {
@@ -373,6 +380,10 @@ function ReelCard({
             touchAction: "pan-y",
             userSelect: "none",
             "@keyframes epochFill": { from: { width: "0%" }, to: { width: "100%" } },
+            "@keyframes rocketFly": {
+              "0%": { left: "-6%", transform: "rotate(45deg)" },
+              "100%": { left: "100%", transform: "rotate(45deg)" },
+            },
             "@keyframes burstPop": {
               "0%": { transform: "translate(-50%,-50%) scale(.3)", opacity: 0 },
               "25%": { transform: "translate(-50%,-50%) scale(1.15)", opacity: 1 },
@@ -437,7 +448,7 @@ function ReelCard({
                 {frames.map((_, segment) => (
                   <Box
                     key={segment}
-                    sx={{ flex: 1, height: 3, borderRadius: 2, bgcolor: "rgba(255,255,255,.28)", overflow: "hidden" }}
+                    sx={{ flex: 1, height: 3, borderRadius: 2, bgcolor: "rgba(255,255,255,.28)", overflow: "hidden", position: "relative" }}
                   >
                     {segment < frame && <Box sx={{ width: "100%", height: "100%", bgcolor: "#fff" }} />}
                     {segment === frame && (
@@ -454,6 +465,18 @@ function ReelCard({
                     )}
                   </Box>
                 ))}
+                {/* Rocket that flies the whole progress track once per loop. */}
+                <RocketLaunch
+                  sx={{
+                    position: "absolute",
+                    top: -7,
+                    fontSize: 17,
+                    color: "#ffb74d",
+                    filter: "drop-shadow(0 0 6px rgba(255,183,77,.8))",
+                    animation: frames.length >= 2 ? `rocketFly ${frames.length * speedMs}ms linear infinite` : undefined,
+                    animationPlayState: holding || paused || !visible ? "paused" : "running",
+                  }}
+                />
               </Stack>
             )}
           </Box>
@@ -482,6 +505,19 @@ function ReelCard({
             <Typography sx={{ color: "#7fb8ff", fontSize: 11, mt: 0.5, textShadow: "0 1px 4px #000" }}>
               #SPHEREx #infraredSky #spaceApps
             </Typography>
+            {(item.score ?? 0) > 0 && (
+              <Stack direction="row" spacing={0.75} sx={{ mt: 0.75 }}>
+                <Chip
+                  size="small"
+                  label={`${item.score} points`}
+                  sx={{ bgcolor: "rgba(255,183,77,.18)", color: "#ffb74d", fontSize: 10, height: 20 }}
+                />
+                {item.flags > 0 && <Chip size="small" label={`${item.flags} flag${item.flags === 1 ? "" : "s"}`} sx={{ bgcolor: "rgba(255,255,255,.1)", color: "#ffd890", fontSize: 10, height: 20 }} />}
+                {item.comments > 0 && <Chip size="small" label={`${item.comments} comment${item.comments === 1 ? "" : "s"}`} sx={{ bgcolor: "rgba(255,255,255,.1)", color: "#9ddcff", fontSize: 10, height: 20 }} />}
+                {item.gifs > 0 && <Chip size="small" label={`${item.gifs} gif${item.gifs === 1 ? "" : "s"}`} sx={{ bgcolor: "rgba(255,255,255,.1)", color: "#c9b8ff", fontSize: 10, height: 20 }} />}
+                {item.people > 0 && <Chip size="small" label={`${item.people} ${item.people === 1 ? "person" : "people"}`} sx={{ bgcolor: "rgba(255,255,255,.1)", color: "#9fe8c0", fontSize: 10, height: 20 }} />}
+              </Stack>
+            )}
           </Box>
 
           {/* ——— Right action rail (Instagram-style) ——— */}
@@ -579,15 +615,15 @@ function ReelCard({
             />
           )}
 
-          {/* Double-tap burst (Instagram heart, NASA edition) */}
+          {/* Double-tap burst (Instagram heart) */}
           {burst && (
-            <BookmarkAdd
+            <Favorite
               sx={{
                 position: "absolute",
                 left: "50%",
                 top: "50%",
                 fontSize: 96,
-                color: "#ffb74d",
+                color: "#ff4d5e",
                 filter: "drop-shadow(0 2px 10px rgba(0,0,0,.8))",
                 animation: "burstPop 750ms ease-out forwards",
                 pointerEvents: "none",
@@ -711,6 +747,16 @@ export default function ScrollPage() {
     setTutorialForced(false);
   }, []);
 
+  // Engagement leaderboard (the /survey ranking).
+  const [surveyOpen, setSurveyOpen] = useState(false);
+  const [survey, setSurvey] = useState<Survey | null>(null);
+  const openSurvey = useCallback(() => {
+    setSurveyOpen(true);
+    getSurvey()
+      .then(setSurvey)
+      .catch(() => setSurvey({ status: "error", regions: [], caveats: [] }));
+  }, []);
+
   // Autoscroll: advance to the next reel on a timer. Pauses when the user
   // manually scrolls, taps a card, or opens the tutorial; loops at the end.
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -797,6 +843,11 @@ export default function ScrollPage() {
               <HelpOutline />
             </IconButton>
           </Tooltip>
+          <Tooltip title="Engagement leaderboard">
+            <IconButton onClick={openSurvey} sx={{ color: "#8b97a8" }} aria-label="Open leaderboard">
+              <Leaderboard />
+            </IconButton>
+          </Tooltip>
           <Button
             component={Link}
             href="/flags"
@@ -853,6 +904,63 @@ export default function ScrollPage() {
       )}
 
       {tutorialOpen && <ScrollTutorial onClose={closeTutorial} />}
+
+      <Dialog open={surveyOpen} onClose={() => setSurveyOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle sx={{ fontSize: 17 }}>
+          Engagement leaderboard
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            Regions ranked by how much people interacted with them. This is a social measure, not a
+            scientific ranking — a high score means people talked about it, not that the sky is
+            objectively more interesting.
+          </Typography>
+          {survey === null ? (
+            <Stack alignItems="center" sx={{ py: 3 }}>
+              <CircularProgress size={22} />
+            </Stack>
+          ) : survey.regions.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              No interactions yet — flag, comment, or save a region to see it here.
+            </Typography>
+          ) : (
+            <Stack spacing={1}>
+              {survey.regions.map((region, index) => (
+                <Stack
+                  key={region.region_key}
+                  direction="row"
+                  alignItems="center"
+                  spacing={1.5}
+                  sx={{ p: 1, borderRadius: 1, bgcolor: index === 0 ? "rgba(255,183,77,.12)" : "rgba(255,255,255,.04)" }}
+                >
+                  <Typography sx={{ fontWeight: 800, color: index === 0 ? "#ffb74d" : "text.secondary", minWidth: 20 }}>
+                    {index + 1}
+                  </Typography>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontWeight: 700, fontSize: 13 }}>
+                      RA {region.ra.toFixed(2)}° · Dec {region.dec.toFixed(2)}°
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {region.flags} flag{region.flags === 1 ? "" : "s"} · {region.comments} comment
+                      {region.comments === 1 ? "" : "s"} · {region.gifs} gif{region.gifs === 1 ? "" : "s"} ·{" "}
+                      {region.saves} save{region.saves === 1 ? "" : "s"} · {region.people} person
+                      {region.people === 1 ? "" : "people"}
+                    </Typography>
+                  </Box>
+                  <Typography sx={{ fontWeight: 800, color: "#ffb74d", fontSize: 15 }}>
+                    {region.score}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+          )}
+          {survey && survey.caveats.length > 0 && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1.5 }}>
+              {survey.caveats.join(" ")}
+            </Typography>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Snackbar
         open={toast !== null}

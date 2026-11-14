@@ -205,6 +205,12 @@ export type FeedItem = {
   band: string | null;
   n_frames: number;
   region_key: string;
+  score: number;
+  flags: number;
+  comments: number;
+  gifs: number;
+  people: number;
+  saves: number;
 };
 
 export type Feed = {
@@ -240,6 +246,7 @@ export type MarkCreate = {
   epoch?: string | null;
   note?: string | null;
   source?: string;
+  region_key?: string | null;
   x_frac?: number | null;
   y_frac?: number | null;
 };
@@ -256,6 +263,41 @@ export async function getMarks(): Promise<{ status: string; marks: Mark[] }> {
 /** Save a "this looks suspicious" flag; a tapped spot is converted to sky coordinates server-side. */
 export async function createMark(payload: MarkCreate): Promise<Mark> {
   return request<Mark>("/marks", { method: "POST", body: JSON.stringify(payload) });
+}
+
+/** Double-tap save (like) a sky region. */
+export async function saveRegion(regionKey: string): Promise<{ id: string; region_key: string; created_at: string }> {
+  return request<{ id: string; region_key: string; created_at: string }>("/saves", {
+    method: "POST",
+    body: JSON.stringify({ region_key: regionKey }),
+  });
+}
+
+export async function getSaveCount(regionKey: string): Promise<{ status: string; region_key: string; count: number }> {
+  return request<{ status: string; region_key: string; count: number }>(`/saves?region_key=${encodeURIComponent(regionKey)}`);
+}
+
+export type SurveyItem = {
+  region_key: string;
+  ra: number;
+  dec: number;
+  score: number;
+  flags: number;
+  comments: number;
+  gifs: number;
+  people: number;
+  saves: number;
+};
+
+export type Survey = {
+  status: string;
+  regions: SurveyItem[];
+  caveats: string[];
+};
+
+/** Engagement leaderboard: every interacted region, ranked by score. */
+export async function getSurvey(): Promise<Survey> {
+  return request<Survey>("/survey");
 }
 
 export async function deleteMark(id: string): Promise<void> {
