@@ -12,6 +12,7 @@ class ObservationResponse(BaseModel):
     observation_id: str
     epoch: datetime | None
     band: str | None
+    wavelength: float | None = None
     ra: float | None
     dec: float | None
     source: str = "cached"

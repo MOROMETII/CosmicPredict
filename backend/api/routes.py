@@ -15,7 +15,8 @@ from scipy import ndimage
 
 from backend import storage
 from backend.api.schemas import AnalyzeRequest, AnalyzeResponse, EpochsResponse, ObservationResponse
-from backend.astronomy.calibration import robust_normalize
+from backend.astronomy import render
+from backend.astronomy.difference import significance_map
 
 router = APIRouter(prefix="/api")
 
@@ -40,17 +41,19 @@ def _catalog() -> dict[str, ObservationResponse]:
     records: dict[str, ObservationResponse] = {}
     for record in storage.list_observations():
         observation_id = record["observation_id"]
+        header = record.get("header") or {}
         records[observation_id] = ObservationResponse(
             observation_id=observation_id,
             epoch=_parse_epoch(record.get("epoch")),
-            band=str(record["band"]) if record.get("band") is not None else None,
+            band=record.get("band"),
+            wavelength=float(header["WAVELENGTH"]) if header.get("WAVELENGTH") is not None else None,
             ra=float(record["ra"]) if record.get("ra") is not None else None,
             dec=float(record["dec"]) if record.get("dec") is not None else None,
             source=record.get("source") or "cached",
             provenance={
                 "source_path": record.get("local_path"),
                 "storage_path": record.get("storage_path"),
-                "header": record.get("header") or {},
+                "header": header,
             },
             image_url=f"/api/images/{observation_id}/preview",
             asset_status=record.get("asset_status") or "preview_available",
@@ -60,35 +63,17 @@ def _catalog() -> dict[str, ObservationResponse]:
     return records
 
 
-def _load_patch(observation_id: str, row: int, column: int, size: int) -> np.ndarray:
+def _load_raw_patch(observation_id: str, row: int, column: int, size: int) -> tuple[np.ndarray, np.ndarray | None, np.ndarray]:
     if observation_id not in _catalog():
         raise HTTPException(status_code=404, detail=f"unknown observation: {observation_id}")
-    calibrated = robust_normalize(storage.load_observation(observation_id))
+    observation = storage.load_observation(observation_id)
     end_row, end_column = row + size, column + size
-    if end_row > calibrated.image.shape[0] or end_column > calibrated.image.shape[1]:
+    if end_row > observation.image.shape[0] or end_column > observation.image.shape[1]:
         raise HTTPException(status_code=422, detail="requested patch exceeds image bounds")
-    return calibrated.image[row:end_row, column:end_column]
-
-
-def _false_color(values: np.ndarray) -> Image.Image:
-    finite = np.isfinite(values)
-    if not finite.any():
-        raise ValueError("image has no finite pixels")
-    valid = values[finite]
-    lower, upper = np.percentile(valid, [1.0, 99.5])
-    stretched = np.clip((values - lower) / max(upper - lower, 1e-6), 0, 1)
-    stretched = np.arcsinh(stretched * 8) / np.arcsinh(8)
-    stops = np.array(
-        [[3, 8, 24], [20, 72, 120], [64, 185, 190], [246, 190, 86], [255, 242, 190]],
-        dtype=np.float32,
-    )
-    positions = np.linspace(0, 1, len(stops))
-    rgb = np.stack(
-        [np.interp(stretched, positions, stops[:, channel]) for channel in range(3)],
-        axis=-1,
-    ).astype(np.uint8)
-    rgb[~finite] = [0, 0, 0]
-    return Image.fromarray(rgb, mode="RGB")
+    image = observation.image[row:end_row, column:end_column]
+    variance = None if observation.variance is None else observation.variance[row:end_row, column:end_column]
+    valid = observation.valid_mask[row:end_row, column:end_column]
+    return image, variance, valid
 
 
 def _png_response(image: Image.Image) -> Response:
@@ -114,7 +99,15 @@ def _validate_pair(context_epoch: str, target_epoch: str) -> tuple[ObservationRe
     if context is None or target is None:
         raise HTTPException(status_code=404, detail="both observations must exist in the cached catalog")
     if context.band and target.band and context.band != target.band:
-        raise HTTPException(status_code=422, detail="observations use incompatible bands")
+        raise HTTPException(
+            status_code=422,
+            detail=f"observations use incompatible spectral channels (detector {context.band} vs {target.band})",
+        )
+    if context.wavelength is not None and target.wavelength is not None and abs(context.wavelength - target.wavelength) > 0.05:
+        raise HTTPException(
+            status_code=422,
+            detail=f"observations use incompatible wavelengths ({context.wavelength:.3f} vs {target.wavelength:.3f} um)",
+        )
     if None not in (context.ra, context.dec, target.ra, target.dec):
         separation = _angular_separation(context.ra, context.dec, target.ra, target.dec)
         if separation > 0.1:
@@ -132,12 +125,15 @@ def _candidates_from_map(
     coordinate_space: str,
     minimum_area: int = 2,
     maximum_candidates: int = 50,
+    minimum_score: float | None = None,
 ) -> list[dict[str, Any]]:
     finite = np.isfinite(score_map)
     values = score_map[finite]
     if values.size == 0:
         return []
     threshold = max(float(np.percentile(values, 99.0)), float(values.mean() + 3.0 * values.std()))
+    if minimum_score is not None:
+        threshold = max(threshold, minimum_score)
     labeled, count = ndimage.label(finite & (score_map >= threshold))
     candidates: list[dict[str, Any]] = []
     for label_index in range(1, count + 1):
@@ -178,22 +174,23 @@ def health() -> dict[str, Any]:
 def epochs(
     ra: float = Query(..., ge=0, lt=360),
     dec: float = Query(..., ge=-90, le=90),
+    radius: float = Query(default=1.0, ge=0.05, le=5.0),
 ) -> EpochsResponse:
     observations = [
         observation
         for observation in _catalog().values()
         if observation.ra is not None
         and observation.dec is not None
-        and _angular_separation(ra, dec, observation.ra, observation.dec) <= 0.1
+        and _angular_separation(ra, dec, observation.ra, observation.dec) <= radius
     ]
     return EpochsResponse(
         status="cached_region_match" if observations else "no_cached_region_match",
         observations=observations,
         message=(
-            "Cached observations are selected by center separation within 0.1 degrees. "
+            f"Cached observations are selected by center separation within {radius} degrees. "
             "Full WCS footprint validation is not available for this fixture."
             if observations
-            else f"No cached observation centers are within 0.1 degrees of RA={ra}, Dec={dec}."
+            else f"No cached observation centers are within {radius} degrees of RA={ra}, Dec={dec}."
         ),
     )
 
@@ -208,11 +205,13 @@ def image(observation_id: str) -> ObservationResponse:
 
 @router.get("/images/{observation_id}/preview")
 def image_preview(observation_id: str) -> Response:
-    if observation_id not in _catalog():
+    record = _catalog().get(observation_id)
+    if record is None:
         raise HTTPException(status_code=404, detail=f"unknown observation: {observation_id}")
     try:
         observation = storage.load_observation(observation_id)
-        png = _false_color(observation.image)
+        wavelength = record.wavelength
+        png = Image.fromarray(render.render_mono(observation.image, observation.valid_mask, wavelength), mode="RGB")
     except (OSError, ValueError, TypeError) as error:
         raise HTTPException(status_code=500, detail=f"could not render observation preview: {error}") from error
     return _png_response(png)
@@ -226,9 +225,12 @@ def difference_preview(
     column: int = Query(default=0, ge=0),
     size: int = Query(default=128, ge=8, le=1024, multiple_of=8),
 ) -> Response:
-    context = _load_patch(context_epoch, row, column, size)
-    target = _load_patch(target_epoch, row, column, size)
-    return _png_response(_false_color(np.abs(target - context)))
+    _validate_pair(context_epoch, target_epoch)
+    image_a, var_a, valid_a = _load_raw_patch(context_epoch, row, column, size)
+    image_b, var_b, valid_b = _load_raw_patch(target_epoch, row, column, size)
+    significance, valid = significance_map(image_a, var_a, valid_a, image_b, var_b, valid_b)
+    png = Image.fromarray(render.render_difference(significance, valid), mode="RGB")
+    return _png_response(png)
 
 
 @router.get("/images", response_model=list[ObservationResponse])
@@ -238,10 +240,10 @@ def images() -> list[ObservationResponse]:
 
 def _analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     _validate_pair(request.context_epoch, request.target_epoch)
-    context = _load_patch(request.context_epoch, request.row, request.column, request.size)
-    target = _load_patch(request.target_epoch, request.row, request.column, request.size)
-    difference_score = float(np.mean(np.abs(target - context)))
-    difference_map = np.abs(target - context)
+    image_a, var_a, valid_a = _load_raw_patch(request.context_epoch, request.row, request.column, request.size)
+    image_b, var_b, valid_b = _load_raw_patch(request.target_epoch, request.row, request.column, request.size)
+    significance, valid = significance_map(image_a, var_a, valid_a, image_b, var_b, valid_b)
+    difference_score = float(np.mean(np.abs(significance[valid]))) if valid.any() else 0.0
     difference_image_url = (
         f"/api/diff/preview?context_epoch={request.context_epoch}"
         f"&target_epoch={request.target_epoch}&row={request.row}"
@@ -254,11 +256,15 @@ def _analyze(request: AnalyzeRequest) -> AnalyzeResponse:
         difference_score=difference_score,
         difference_image_url=difference_image_url,
         candidates=_candidates_from_map(
-            difference_map,
-            source="difference",
+            np.abs(significance),
+            source="significance",
             coordinate_space="image_patch_pixel",
+            minimum_score=5.0,
         ),
-        caveats=["Difference score is a simplified normalized pixel baseline."],
+        caveats=[
+            "Difference score is the mean absolute noise-normalized significance (sigma).",
+            "Candidates are regions exceeding a 5-sigma significance threshold and are not confirmed detections.",
+        ],
     )
 
 
