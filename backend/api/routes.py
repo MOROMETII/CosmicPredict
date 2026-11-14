@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import time
 from io import BytesIO
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -16,14 +14,9 @@ from PIL import Image
 from scipy import ndimage
 
 from backend import storage
-from backend.ai.inference import JEPAInference
 from backend.api.schemas import AnalyzeRequest, AnalyzeResponse, EpochsResponse, ObservationResponse
 from backend.astronomy.calibration import robust_normalize
 
-ROOT = Path(__file__).resolve().parents[2]
-CHECKPOINT = ROOT / "models" / "checkpoints" / "jepa.pt"
-
-RAW_DIR = ROOT / "data" / "raw"
 router = APIRouter(prefix="/api")
 
 
@@ -102,13 +95,6 @@ def _png_response(image: Image.Image) -> Response:
     payload = BytesIO()
     image.save(payload, format="PNG", optimize=True)
     return Response(content=payload.getvalue(), media_type="image/png")
-
-
-def _checkpoint_path() -> Path:
-    checkpoint = Path(os.environ.get("JEPA_CHECKPOINT", CHECKPOINT))
-    if not checkpoint.is_absolute():
-        checkpoint = ROOT / checkpoint
-    return checkpoint
 
 
 def _angular_separation(ra_a: float, dec_a: float, ra_b: float, dec_b: float) -> float:
