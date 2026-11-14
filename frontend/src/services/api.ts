@@ -288,3 +288,25 @@ export async function analyzeRegion(
     }),
   });
 }
+
+/** OpenCV change detection on the rendered difference image (visual aid, not the significance baseline). */
+export async function exploreRegion(
+  contextEpoch: string,
+  targetEpoch: string,
+  ra: number,
+  dec: number,
+  fov = 15,
+  size = 256,
+): Promise<Analysis> {
+  return request<Analysis>("/explore_region", {
+    method: "POST",
+    body: JSON.stringify({
+      context_epoch: contextEpoch,
+      target_epoch: targetEpoch,
+      ra,
+      dec,
+      fov_arcmin: fov,
+      size,
+    }),
+  });
+}
