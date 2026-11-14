@@ -289,6 +289,32 @@ export async function analyzeRegion(
   });
 }
 
+export type PatchCenter = { ra: number; dec: number; fov_arcmin: number };
+
+/** Map a fractional image rectangle (0..1) to the sky center + FOV of that patch. */
+export async function patchCenter(
+  ra: number,
+  dec: number,
+  fov: number,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  size = 256,
+): Promise<PatchCenter> {
+  const params = new URLSearchParams({
+    ra: String(ra),
+    dec: String(dec),
+    fov: String(fov),
+    size: String(size),
+    x0: String(x0),
+    y0: String(y0),
+    x1: String(x1),
+    y1: String(y1),
+  });
+  return request<PatchCenter>(`/patch_center?${params.toString()}`);
+}
+
 /** OpenCV change detection on the rendered difference image (visual aid, not the significance baseline). */
 export async function exploreRegion(
   contextEpoch: string,
