@@ -3,3 +3,7 @@ data/raw
 data/parsed
 __pycache__/
 *.pyc
+data/snapshots
+data/processed
+.venv/
+models/

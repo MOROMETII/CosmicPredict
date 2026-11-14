@@ -1,24 +1,74 @@
 import { Alert, Box, Chip, Divider, Stack, Typography } from "@mui/material";
-import { AutoAwesome, InfoOutlined } from "@mui/icons-material";
+import { TravelExplore } from "@mui/icons-material";
 import type { Candidate } from "@/services/api";
 
-export default function DiscoveryPanel({ candidate }: { candidate: Candidate | null }) {
+type Props = {
+  candidate: Candidate | null;
+  /** Arcseconds per cutout pixel, so sizes can be reported in sky units. */
+  pixelScaleArcsec?: number;
+};
+
+/** Plain-language explanation of one flagged region. */
+export default function DiscoveryPanel({ candidate, pixelScaleArcsec }: Props) {
   if (!candidate) {
-    return <Stack alignItems="center" justifyContent="center" sx={{ minHeight: 230, textAlign: "center", color: "rgba(188,204,223,.62)" }}><AutoAwesome sx={{ color: "#71e5c1", fontSize: 30, mb: 1 }} /><Typography sx={{ fontWeight: 700, color: "#e5f0ff" }}>Select a candidate</Typography><Typography sx={{ fontSize: 12, maxWidth: 240, mt: .5 }}>Run Find Changes, then select an overlay to inspect its evidence.</Typography></Stack>;
+    return (
+      <Stack alignItems="center" justifyContent="center" spacing={1} sx={{ minHeight: 200, textAlign: "center", p: 2 }}>
+        <TravelExplore sx={{ color: "text.secondary", fontSize: 32 }} />
+        <Typography sx={{ fontWeight: 700 }}>No region selected</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 260 }}>
+          Run <strong>Find changes</strong>, then choose a flagged region from the list to see why it
+          was flagged.
+        </Typography>
+      </Stack>
+    );
   }
+
+  const sigma = candidate.score;
+  const sizeArcsec = pixelScaleArcsec
+    ? `${Math.round(Math.max(candidate.width, candidate.height) * pixelScaleArcsec)}″ across`
+    : `${Math.max(candidate.width, candidate.height)} pixels across`;
+  const confidenceWord = sigma >= 10 ? "a very strong" : sigma >= 7 ? "a strong" : "a";
+
   return (
-    <Stack spacing={2}>
-      <Stack direction="row" justifyContent="space-between" alignItems="start">
-        <Box><Typography sx={{ fontWeight: 800, fontSize: 18 }}>{candidate.candidate_id}</Typography><Typography sx={{ fontSize: 12, color: "rgba(188,204,223,.6)" }}>Unclassified candidate</Typography></Box>
-        <Chip label="REVIEW" size="small" sx={{ color: "#f6d58a", bgcolor: "rgba(246,213,138,.12)", fontSize: 10 }} />
+    <Stack spacing={1.5} sx={{ p: 0.5 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Typography sx={{ fontWeight: 800 }}>{candidate.candidate_id}</Typography>
+        <Chip
+          size="small"
+          label="UNCONFIRMED"
+          sx={(theme) => ({
+            bgcolor: "#fff3cd",
+            color: "#6a4e00",
+            fontSize: 11,
+            ...theme.applyStyles("dark", { bgcolor: "#4a3b00", color: "#ffd558" }),
+          })}
+        />
       </Stack>
-      <Divider sx={{ borderColor: "rgba(144,169,198,.14)" }} />
-      <Box><Typography sx={{ color: "rgba(188,204,223,.6)", fontSize: 11 }}>WHY IT WAS FLAGGED</Typography><Typography sx={{ mt: .5, fontSize: 13, lineHeight: 1.55 }}>A connected region exceeded the simplified normalized difference threshold in the selected image patch.</Typography></Box>
-      <Stack direction="row" spacing={1}>
-        <Box sx={{ flex: 1, p: 1.2, bgcolor: "rgba(100,140,180,.1)", borderRadius: 2 }}><Typography sx={{ fontSize: 11, color: "rgba(188,204,223,.6)" }}>Difference score</Typography><Typography sx={{ fontWeight: 800 }}>{candidate.score.toFixed(3)}</Typography></Box>
-        <Box sx={{ flex: 1, p: 1.2, bgcolor: "rgba(100,140,180,.1)", borderRadius: 2 }}><Typography sx={{ fontSize: 11, color: "rgba(188,204,223,.6)" }}>Area</Typography><Typography sx={{ fontWeight: 800 }}>{candidate.area} px</Typography></Box>
-      </Stack>
-      <Alert icon={<InfoOutlined />} severity="info" sx={{ bgcolor: "rgba(73,132,174,.1)", color: "#b9d8f4", fontSize: 11, "& .MuiAlert-icon": { color: "#80c5ed" } }}>{candidate.caveat}</Alert>
+      <Divider />
+      <Box>
+        <Typography variant="overline" color="text.secondary">
+          What happened here
+        </Typography>
+        <Typography variant="body2">
+          The brightness at this spot changed between the two dates by{" "}
+          <strong>{sigma.toFixed(1)}× the measurement noise</strong> — {confidenceWord} signal that
+          something real changed (5× is the usual astronomy threshold). The changed region is about{" "}
+          {sizeArcsec}.
+        </Typography>
+      </Box>
+      <Box>
+        <Typography variant="overline" color="text.secondary">
+          What it could be
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          A star changing brightness, an object that moved (look for a paired red/blue spot in the
+          difference image), an image artifact, or a wavelength difference between visits. Telling
+          these apart needs human review — that is exactly the discovery step this tool is for.
+        </Typography>
+      </Box>
+      <Alert severity="info" sx={{ fontSize: 12 }}>
+        {candidate.caveat}
+      </Alert>
     </Stack>
   );
 }

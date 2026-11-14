@@ -1,278 +1,148 @@
-# Building a SPHEREx Time-Domain Viewer for NASA Space Apps 2026
+# COSMIC PREDICT — SPHEREx Time-Domain Explorer
 
-## Run the complete app locally
+A public-facing web tool for NASA Space Apps Challenge 2026 ("[Planet X and SPHEREx](https://www.spaceappschallenge.org/2026/challenges/planet-x-and-spherex/)").
+Enter sky coordinates and replay real SPHEREx observations of that spot like a
+short film: blink between dates to catch moving objects, run noise-aware change
+detection, and plot the spot's brightness over time. Everything shown is real
+archive data or clearly labeled as derived/synthetic.
 
-The app runs as a Next.js frontend and a FastAPI backend. Use two PowerShell
-terminals from `D:\NasaSpaceBalls`.
+Independent hackathon entry, not an official NASA product. SPHEREx data courtesy
+NASA/JPL-Caltech/IPAC-IRSA.
 
-Terminal 1 — backend:
+## Run the app locally
+
+Backend requires Python 3.11+; frontend requires Node 20+.
+
+### Linux / macOS
+
+```bash
+# one-time setup
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+cp backend/.env.example backend/.env   # optionally fill in Supabase credentials
+cd frontend && npm install && cd ..
+
+# terminal 1 — backend (run from the repository root, not from backend/)
+source .venv/bin/activate
+python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+
+# terminal 2 — frontend
+cd frontend && npm run dev
+```
+
+### Windows (PowerShell)
 
 ```powershell
 python -m pip install -r backend\requirements.txt
+Copy-Item backend\.env.example backend\.env
 python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+# second terminal:
+Set-Location frontend; npm install; npm run dev
 ```
 
-Terminal 2 — frontend:
+Open <http://localhost:3000>. The frontend proxies `/api/*` to the backend
+(override with the `BACKEND_URL` env var). Views are shareable via URL:
+`http://localhost:3000/?ra=269.454&dec=4.693`.
 
-```powershell
-Set-Location frontend
-npm install
-npm run dev
-```
+## Getting observation data
 
-Open [http://localhost:3000](http://localhost:3000). The frontend talks to
-`http://localhost:8000/api` by default. The cached provider makes the demo
-usable offline from IRSA. Verify the services with:
+The app needs SPHEREx FITS images locally (or via the team Supabase). Three ways:
 
-```powershell
-Invoke-WebRequest http://localhost:8000/api/health
-Invoke-WebRequest http://localhost:3000
-```
+1. **In-app, on demand (easiest).** Enter any coordinates; when nothing is
+   cached, click **"Search the NASA archive"**. The backend queries IRSA and
+   downloads small server-side *cutouts* (a few MB per epoch instead of the
+   full 65 MB products) into `data/raw/`. Takes about a minute per new region.
 
-Then select two epochs in the timeline and click **Find Changes**.
+2. **Bulk pre-fetch of the challenge's five test targets** (recommended before
+   a demo; ~2.2 GB, 30–60 min):
 
-## 1. Reality Check: What Data Actually Exists (and When)
+   ```bash
+   python scripts/scrape_timeline.py            # all five targets
+   python scripts/scrape_timeline.py --dry-run  # show the plan first
+   python scripts/scrape_timeline.py --targets "R Draconis" --upload
+   ```
 
-Before designing the tool, you need to understand the data timeline. SPHEREx launched in March 2025. As of the 2026 hackathon (November 14–15, 2026), the data situation is:
+   The script samples one well-centered image per month per target in the
+   best-covered detector band. It is idempotent — already-downloaded files are
+   skipped — so every teammate can run it on their own machine. `--upload`
+   additionally pushes compact snapshots to the team Supabase (mind the
+   storage quota; see below).
 
-| Data Product | Availability at IRSA | Useful for "Change Over Time"? |
-|---|---|---|
-| Calibrated Spectral Images (Quick Release) | Within ~60 days of observation, released weekly | **Yes** — you can get multiple epochs of the same sky region |
-| Reprocessed Calibrated Images (QR2) | First release ~October 2025 | **Yes** — better quality, same epochs |
-| All-Sky Data Cubes (102 bands) | **November 2026** (6 months after year 1 survey) | **Maybe** — depending on exact release timing during the hackathon |
-| High Reliability Source Catalog | August 2027 | No |
+3. **Team Supabase.** With `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set in
+   `backend/.env`, the backend lists the shared catalog and downloads snapshots
+   on demand, caching them locally. Without credentials it falls back to
+   whatever is in `data/raw/` — the demo works fully offline from local files.
 
-**Key takeaway:** You will likely be working with **Quick Release spectral images** and possibly the first All-Sky Data Cubes if they drop during the hackathon. The "change over time" is real but limited — SPHEREx surveys the full sky every six months, so between mid-2025 and late 2026 you have roughly 2–3 full-sky epochs for many regions.
+Observation data lives in `data/` and is **git-ignored — never commit FITS or
+snapshot files**.
 
----
+## Configuration (`backend/.env`)
 
-## 2. Architecture Overview
-
-The system has three layers: a frontend for visualization, a backend for querying and image processing, and a data layer that pulls from IRSA or a local cache.
-
-**Frontend (React/Next.js)**
-- Sky Viewer (Aladin Lite or OpenSeaDragon)
-- Timeline Slider for epoch selection
-- Object Diff Panel for change detection
-
-**Backend (FastAPI or Node.js)**
-- `/images?ra=...&dec=...&epoch=...` — fetch image for a sky region at an epoch
-- `/objects/{id}/history` — return all epochs for an object
-- `/diff?ra1=...&ra2=...&epoch1=...&epoch2=...` — compute difference image
-- Caching layer (Redis or filesystem)
-
-**Data Layer**
-- IRSA SIA v2 API for live queries
-- Your mock/cached dataset (pre-downloaded FITS converted to PNG)
-
----
-
-## 3. Real APIs You Can Use
-
-### 3.1 IRSA SIA v2 (Primary Image API)
-
-This is the **official, public** way to query SPHEREx images programmatically.
-
-- **Protocol:** Simple Image Access version 2 (IVOA standard)
-- **Endpoint base:** IRSA SIA v2 service
-- **What you can query:** Position (RA/Dec), waveband, time range
-- **Output formats:** FITS, JSON, VOTable, CSV, HTML
-- **Python access:** `astroquery.query_sia()`
-
-**Example query concept:**
-
-GET /sia/v2/query?POS=150.0,2.0&FORMAT=JSON&BAND=2.0
-
-
-
-### 3.2 IRSA Cloud Data Access (AWS S3)
-
-SPHEREx data is available on AWS Open Data. This is **crucial for a hackathon** because:
-- You can pre-download a small subset of images before the event
-- You avoid hammering the IRSA API during the competition
-- You can serve cached images instantly to the frontend
-
-### 3.3 SPHEREx Data Explorer (Reference)
-
-IRSA provides a user-friendly web app for exploring SPHEREx data. **Study this** — it's the baseline you're improving upon. Your differentiator is the **time-domain visualization** (slider, difference images) that the official explorer may not emphasize.
-
-### 3.4 astroquery (Python)
-
-For the backend, `astroquery.ipac.irsa` provides programmatic access to IRSA services. This is the recommended path for fetching images in your backend code.
-
----
-
-## 4. Can You Build Your Own Placeholder API?
-
-**Yes, and you should.** Here's why and how:
-
-### Why Build a Mock API
-
-1. **Data gaps:** The All-Sky Data Cubes may not be available during the hackathon. Quick Release images are available, but downloading and processing FITS files takes time.
-2. **Demo reliability:** Live API calls during a 48-hour hackathon are risky. A cached/mock layer ensures your demo never fails.
-3. **Frontend-first development:** You can build the entire UI without waiting for real data pipelines.
-4. **Performance:** Serving pre-processed PNGs from your own API is faster than real-time FITS conversion.
-
-### Mock API Design
-
-The mock API mirrors the real IRSA interface so you can swap data sources without rewriting frontend code. It exposes three endpoints: one for fetching images by sky region and epoch, one for listing available epochs at a position, and one for computing difference images between two epochs.
-
-The image endpoint accepts RA/Dec bounds and an epoch string, returning a JSON object with an image URL and metadata. The epochs endpoint takes a single RA/Dec and returns a list of epochs where data exists. The diff endpoint takes two epochs and returns a difference image URL plus any detected candidate sources.
-
-### How to Populate the Mock
-
-1. **Pre-hackathon:** Download 50–100 SPHEREx Quick Release FITS images covering a few interesting sky regions (e.g., Orion, Galactic center, ecliptic poles).
-2. **Process them:** Use `astropy.io.fits` + `matplotlib` to convert to PNGs with proper stretching.
-3. **Store metadata:** RA/Dec bounds, epoch, band, file path in a simple SQLite or JSON file.
-4. **Serve via FastAPI:** Static file serving + metadata endpoints.
-
-This mock API is **your safety net**. If the real IRSA API works during the hackathon, swap the data source behind the same interface.
-
----
-
-## 5. Recommended Tech Stack
-
-### Frontend
-
-| Component | Tool | Why |
-|---|---|---|
-| Framework | **React** or **Next.js** | Fast development, component reuse |
-| Sky Viewer | **Aladin Lite** or **OpenSeaDragon** | Aladin is built for astronomy; OpenSeaDragon handles deep zoom |
-| Timeline UI | **noUiSlider** or **rc-slider** | Epoch slider |
-| Maps/coords | **D3.js** for overlays, or just CSS transforms | Lightweight |
-
-**Aladin Lite** is particularly strong for astronomy: it handles HiPS (Hierarchical Progressive Surveys) and can overlay FITS images. It's what professional astronomy tools use.
-
-### Backend
-
-| Component | Tool | Why |
-|---|---|---|
-| API Framework | **FastAPI** (Python) | Async, auto-docs, easy FITS processing |
-| FITS Processing | **Astropy** + **NumPy** | Standard for astronomy data |
-| Image Conversion | **Pillow** or **Matplotlib** | FITS → PNG |
-| Caching | **Redis** or just local filesystem | Hackathon-friendly |
-| Database (optional) | **SQLite** | Zero-config metadata store |
-
-### Difference Imaging (for transient detection)
-
-If you want to show "what changed," you need **image subtraction**:
-
-1. **Align** two epochs (astrometric matching)
-2. **PSF-match** the images (blur the sharper one)
-3. **Subtract** and look for residuals
-
-For a hackathon, you can use **HOTPANTS** (a standard astronomy tool) or write a simplified version using NumPy array subtraction after normalization.
-
-The limitation is real: proper image subtraction requires careful PSF matching and alignment. For a hackathon demo, a **"blink comparator"** (toggle between epochs) is often more compelling and easier to implement than a true difference image.
-
----
-
-## 6. The Killer Feature: "Blink" + Transient Detection
-
-The challenge says: *"Comets, asteroids, stars, brown dwarfs, and even new planets reveal themselves by shifting position between images."*
-
-Your tool should:
-
-1. **Let users select a sky region** (via Aladin Lite)
-2. **Show all available epochs** for that region (timeline)
-3. **Blink** between epochs (toggle animation)
-4. **Highlight moving objects** — either via a simple centroid detection or a "difference mode"
-5. **Allow zoom and pan** to inspect objects
-
-### Moving Object Detection (Simple Approach)
-
-For a hackathon, you don't need full source extraction. You can:
-
-1. Get two epochs of the same region
-2. Run a simple **connected-components** analysis on the difference image
-3. Filter for sources that appear in one epoch but not the other
-4. Display these as "candidate moving objects" overlays
-
-Use `scipy.ndimage.label` to identify connected regions above a threshold in the difference image, then filter by size and shape to find point-like candidates.
-
----
-
-## 7. Hackathon Execution Plan
-
-### Pre-Hackathon (Do This Now)
-
-| Task | Time | Output |
-|---|---|---|
-| Set up project repo | 1 hour | GitHub repo with frontend/backend skeleton |
-| Query IRSA SIA v2 for sample images | 2 hours | List of available SPHEREx images, understand response format |
-| Download 20–30 sample FITS files | 2 hours | Local cache of images |
-| Convert FITS → PNG with astropy | 2 hours | Visual assets for frontend testing |
-| Build mock API (FastAPI) | 3 hours | Working `/images` and `/epochs` endpoints |
-| Build basic Aladin Lite viewer | 3 hours | Sky viewer showing image overlays |
-| Test blink comparator | 1 hour | Two epochs toggle smoothly |
-
-### Hackathon Weekend (48 Hours)
-
-| Hours | Focus |
+| Variable | Purpose |
 |---|---|
-| 0–6 | Integrate real IRSA API (replace mock data source) |
-| 6–12 | Build timeline slider + epoch selection UI |
-| 12–18 | Implement difference/blink mode |
-| 18–24 | Moving object candidate detection |
-| 24–36 | Polish UI, add "share this view" URL, mobile responsiveness |
-| 36–44 | Test with real data, fix bugs |
-| 44–48 | Demo prep, video recording, presentation |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Team catalog/storage (optional; local fallback otherwise) |
+| `SUPABASE_BUCKET` | Storage bucket, default `spherex-images` |
+| `SPHEREX_SIA_URL` | IRSA SIA v2 endpoint. **Collections change between releases**: `spherex_qr2` was retired (queries return 0 rows); current ones are `spherex_qr3` (rolling quick release) and `spherex_dr1` (year-1 release) |
+| `DATA_RAW_DIR` | Local FITS cache, default `data/raw` |
+| `CORS_ORIGINS` | Comma-separated allowed origins (default `*`) |
 
----
+## API overview
 
-## 8. Critical Warnings
+| Route | Purpose |
+|---|---|
+| `GET /api/health` | Service status, active data provider, observation count |
+| `GET /api/timeline?ra&dec&fov&band` | Chronological same-band observations whose footprint contains the position, with per-frame coverage and a locked brightness scale |
+| `GET /api/cutout/{id}?ra&dec&fov&size&vmin&vmax` | North-up WCS-aligned cutout PNG — every epoch lands on the same sky grid |
+| `POST /api/analyze_region` | Noise-normalized change detection on the aligned cutout grid; returns ≥5σ candidate regions with caveats |
+| `GET /api/diff/aligned?...` | Difference image (red = brighter in A, blue = brighter in B) |
+| `GET /api/spectrum?ra&dec` | Brightness of the position in every covering observation (peak minus background) — powers the light-curve panel |
+| `POST /api/fetch_region?ra&dec` | Fetch time-spread cutouts of a new position from the live IRSA archive (bounded, polite, ledgered) |
+| `GET /api/epochs`, `GET /api/images`, `POST /api/diff`, `POST /api/analyze` | Legacy whole-image routes (unaligned; kept for compatibility) |
 
-1. **SPHEREx data is FITS, not JPEG.** Every image requires processing before it can be displayed in a browser. Budget time for this.
-2. **The IRSA SIA v2 API returns metadata and URLs, not images directly.** You query for images, get URLs, then download the FITS files.
-3. **102 bands means data volume is huge.** For the hackathon, pick **1–3 specific bands** (e.g., near 2.0 μm for stars, 3.3 μm for ices) and build your tool around those. Don't try to handle all 102.
-4. **Full-sky visualization is hard.** Aladin Lite can handle large surveys via HiPS, but SPHEREx HiPS maps may not exist yet. You may need to work at the **tile level** — query small regions (e.g., 1° × 1°) rather than rendering the entire sky at once.
-5. **The All-Sky Data Cubes might not be ready.** Check IRSA's release schedule on the first day of the hackathon. If they're available, they simplify your life (pre-processed, uniform). If not, Quick Release images are your fallback.
+## Architecture
 
----
+- `frontend/` — Next.js + React + MUI. Epoch player with blink mode, A/B
+  comparison with candidate overlays, light-curve panel, optional 3-D view.
+  No FITS parsing or science in the browser.
+- `backend/astronomy/` — FITS loading with quality masks (`fits_loader`),
+  WCS-aligned north-up cutouts (`cutout`), uncertainty-aware difference imaging
+  (`difference`), display rendering (`render`).
+- `backend/storage/` — Supabase-first catalog with local filesystem fallback
+  (`local` keeps sidecar metadata caches next to each FITS), plus on-demand
+  IRSA cutout retrieval (`live_archive`).
+- `backend/api/routes.py` — thin HTTP layer over the above.
+- `scripts/` — bulk scraping and preprocessing utilities.
 
-## 9. Summary: The Minimum Viable Demo
+## Tests
 
-For a winning hackathon submission, you need:
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
 
-1. **A working sky viewer** (Aladin Lite) where users can pan/zoom
-2. **A timeline slider** showing available epochs for the selected region
-3. **A blink mode** that toggles between two epochs with a visible "flicker" effect
-4. **A "Find Changes" button** that runs a simple difference detection and highlights candidates
-5. **A clean, public-facing UI** that explains what SPHEREx is and why this matters
+The suite builds synthetic FITS fixtures with known WCS rotations/offsets and an
+injected moving source, then verifies that alignment lands a fixed star on the
+same pixel across epochs, the mover is detected at >5σ, and the fixed star is
+not flagged.
 
-The mock API ensures this works even if live data is slow or unavailable. The real IRSA integration makes it a legitimate tool. The time-domain focus directly addresses the challenge.
+## Scientific integrity
 
-**Start with the mock. Make it work. Then connect to IRSA.**
+Real SPHEREx observations are the only analysis input. Flagged regions are
+**unclassified candidates**, never confirmed detections. Cutouts are bilinearly
+resampled for alignment (display-grade, not precision photometry). Synthetic
+blends are labeled and excluded from analysis. SPHEREx detectors are
+linear-variable filters, so the same position may be sampled at slightly
+different wavelengths on different visits. Full rules: `AGENTS.md`, `CLAUDE.md`.
 
-https://www.spaceappschallenge.org/2026/challenges/planet-x-and-spherex/?tab=details
+## Team operations
 
-To acquire a bounded sample, first verify the current SPHEREx SIA endpoint,
-then run `python scripts/download_data.py --ra <ra> --dec <dec> --band <band> --service-url <verified-sia-url> --output data/raw`. The script downloads only
-URLs returned by the query and writes `manifest.json` with the full archive
-record, query URL, source URL, and retrieval time. It does not fabricate
-observations.
-
-### FITS preprocessing
-
-Run `python scripts/preprocess.py --input data/raw --output data/processed`.
-This reads the `IMAGE`, `FLAGS`, and `VARIANCE` HDUs when present, masks
-non-finite, flagged, and non-positive-variance pixels, normalizes each
-observation to `[-1, 1]`, and writes ViT-compatible `.npz` patches plus a
-provenance manifest. Invalid or truncated FITS files are recorded under
-`errors` and skipped by default; use `--strict` to fail immediately.
-
-The downloaded files must not be paired merely because they are adjacent in a
-directory. Pair observations only after validating their sky footprint,
-channel/band, and epoch metadata; the manifest retains the source metadata
-needed for that step.
-
-### Backend API
-
-Start the backend from the repository root with
-`uvicorn backend.main:app --reload`. The frontend-facing routes are
-`GET /api/health`, `GET /api/epochs?ra=<ra>&dec=<dec>`,
-`GET /api/images`, `GET /api/images/{observation_id}`, `POST /api/diff`, and
-`POST /api/analyze`. The API reports cached metadata and simplified difference
-scores immediately. Both `/api/diff` and `/api/analyze` return thresholded
-difference candidates with their bounding box, score, and coordinate space so
-the frontend can render overlays without treating them as confirmed objects.
+- **Weekly scrape Action** (`.github/workflows/scrape.yml`) runs
+  `scripts/scrape.sh` → Supabase every Sunday. It reads the repo secret
+  `SPHEREX_SIA_URL`, which still points at the retired `spherex_qr2`
+  collection — IRSA answers "OK, 0 rows", so the pipeline collects nothing.
+  Fix: repo **Settings → Secrets and variables → Actions → `SPHEREX_SIA_URL` →
+  set to** `https://irsa.ipac.caltech.edu/SIA?COLLECTION=spherex_qr3`
+  (or delete the secret — the script's default is now correct).
+- **Supabase quota**: full-frame snapshots are ~28 MB each; check the project's
+  storage plan before bulk `--upload` runs.
