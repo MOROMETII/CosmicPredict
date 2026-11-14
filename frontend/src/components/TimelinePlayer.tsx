@@ -72,6 +72,9 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
 
   const frames = useMemo(() => timeline?.frames ?? [], [timeline]);
   const allLoaded = frames.length > 0 && loadedCount >= frames.length;
+  // Playback only needs two frames to start; remaining frames keep preloading
+  // in the background so the user doesn't wait for the whole series.
+  const canPlay = frames.length >= 2 && loadedCount >= 2;
 
   useEffect(() => {
     let active = true;
@@ -298,7 +301,7 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
               <span>
                 <IconButton
                   onClick={() => setPlaying((value) => !value)}
-                  disabled={frames.length < 2 || !allLoaded}
+                  disabled={!canPlay}
                   sx={{
                     color: "primary.contrastText",
                     bgcolor: "primary.main",

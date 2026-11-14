@@ -9,6 +9,7 @@ so the local directory also acts as a backup.
 from __future__ import annotations
 
 import sys
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,13 @@ from backend.storage import local
 from backend.storage.supabase import SupabaseClient, SupabaseError
 
 _client = SupabaseClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY, config.SUPABASE_BUCKET)
+
+# Parsed observations are small (~234x234 cutouts, <1 MB each), so keep a
+# bounded in-memory LRU so repeated cutout/blink/spectrum requests do not re-read
+# and re-parse the same FITS file from disk every time. Keyed by observation_id,
+# with the source file mtime stored so a re-downloaded file invalidates its entry.
+_OBSERVATION_CACHE_LIMIT = 64
+_observation_cache: "OrderedDict[str, tuple[float, FitsObservation]]" = OrderedDict()
 
 # Column names exposed by the ``observations`` table (see supabase/migrations).
 _DB_COLUMNS = (
@@ -77,8 +85,19 @@ def load_observation(observation_id: str) -> FitsObservation:
 
     Downloads the compact ``.npz`` snapshot from Supabase Storage when present,
     caching it locally as a backup, and otherwise falls back to the local raw
-    FITS file.
+    FITS file. Parsed observations are cached in memory (bounded LRU) so
+    repeated requests do not re-read the same FITS from disk.
     """
+    cached = _observation_cache.get(observation_id)
+    if cached is not None:
+        cached_mtime, cached_observation = cached
+        try:
+            if cached_observation.path.stat().st_mtime == cached_mtime:
+                return cached_observation
+        except OSError:
+            pass
+        del _observation_cache[observation_id]
+
     record = get_observation(observation_id)
     if record is None:
         raise FileNotFoundError(f"unknown observation: {observation_id}")
@@ -93,14 +112,30 @@ def load_observation(observation_id: str) -> FitsObservation:
             except SupabaseError as error:
                 print(f"Supabase snapshot download failed for {observation_id}, using local FITS: {error}", file=sys.stderr)
             else:
-                return compact.observation_from_bytes(
+                observation = compact.observation_from_bytes(
                     snapshot_path.read_bytes(),
                     header=record.get("header") or {},
                     path=snapshot_path,
                 )
+                _cache_observation(observation_id, observation)
+                return observation
 
     local_fits = config.RAW_DIR / (record.get("local_path") or f"{observation_id}.fits")
-    return load_fits_observation(local_fits)
+    observation = load_fits_observation(local_fits)
+    _cache_observation(observation_id, observation)
+    return observation
+
+
+def _cache_observation(observation_id: str, observation: FitsObservation) -> None:
+    """Store a parsed observation in the LRU cache (if its source file is stat-able)."""
+    try:
+        mtime = observation.path.stat().st_mtime
+    except OSError:
+        return
+    _observation_cache[observation_id] = (mtime, observation)
+    _observation_cache.move_to_end(observation_id)
+    while len(_observation_cache) > _OBSERVATION_CACHE_LIMIT:
+        _observation_cache.popitem(last=False)
 
 
 def save_observation_metadata(record: dict[str, Any]) -> dict[str, Any]:
