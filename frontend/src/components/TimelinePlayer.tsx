@@ -8,7 +8,6 @@ import {
   Chip,
   CircularProgress,
   IconButton,
-  LinearProgress,
   MenuItem,
   Select,
   Slider,
@@ -204,8 +203,8 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
         sx={{ mb: 2 }}
       >
         <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 520 }}>
-          Each frame is a real observation of this exact spot, aligned north-up. Press play, or use
-          Blink to flip between the first and last date — anything that jumps or pulses is changing.
+          Frames are real SPHEREx observations of this position, aligned north-up and in date order.
+          Use Play to step through epochs, or Blink to alternate between the first and last.
         </Typography>
         <Stack direction="row" spacing={1}>
           <Tooltip title="Field of view: how wide a patch of sky you see (in arcminutes — the full Moon is about 31')">
@@ -384,9 +383,8 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
 
           {!allLoaded && (
             <Box sx={{ mt: 1.5, maxWidth: 640, mx: "auto" }}>
-              <LinearProgress variant="determinate" value={(loadedCount / frames.length) * 100} />
               <Typography variant="caption" color="text.secondary">
-                Loading frames… {loadedCount} of {frames.length}
+                Loading {loadedCount} of {frames.length} frames
               </Typography>
             </Box>
           )}

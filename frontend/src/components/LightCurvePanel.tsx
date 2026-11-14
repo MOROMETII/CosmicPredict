@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert, Box, Chip, CircularProgress, Stack, Typography } from "@mui/material";
 import { getSpectrum, type Spectrum } from "@/services/api";
 
-type Props = { ra: number; dec: number };
+type Props = { ra: number; dec: number; selectedBand?: string | null };
 
 const WIDTH = 680;
 const HEIGHT = 300;
@@ -31,7 +31,7 @@ function wavelengthColor(um: number): string {
  * A steady source traces a flat line; a variable star rises and falls; points
  * are colored by the infrared wavelength their detector saw.
  */
-export default function LightCurvePanel({ ra, dec }: Props) {
+export default function LightCurvePanel({ ra, dec, selectedBand = null }: Props) {
   const [spectrum, setSpectrum] = useState<Spectrum | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +50,7 @@ export default function LightCurvePanel({ ra, dec }: Props) {
   const plot = useMemo(() => {
     const points = (spectrum?.points ?? [])
       .filter((point) => point.epoch && point.surface_brightness > 0)
+      .filter((point) => !selectedBand || point.band === selectedBand)
       .map((point) => ({ ...point, time: new Date(point.epoch as string).getTime() }))
       .sort((a, b) => a.time - b.time);
     if (points.length === 0) return null;
@@ -82,7 +83,7 @@ export default function LightCurvePanel({ ra, dec }: Props) {
 
     const bands = [...new Set(points.map((point) => `${point.band ?? "?"}|${point.wavelength.toFixed(2)}`))];
     return { points, x, y, xTicks, yTicks, fromY, useLog, bands };
-  }, [spectrum]);
+  }, [spectrum, selectedBand]);
 
   if (loading) {
     return (
