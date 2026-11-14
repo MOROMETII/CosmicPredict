@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import time
 from io import BytesIO
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import datetime
 from typing import Any
 
 import numpy as np
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from PIL import Image
 from scipy import ndimage
@@ -44,44 +43,6 @@ def _parse_epoch(value: Any) -> datetime | None:
         return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except ValueError:
         return None
-
-
-def _iso_epoch_string(value: Any) -> str | None:
-    if not value:
-        return None
-    text = str(value).strip()
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    if "+" not in text and text.count(":") >= 2:
-        text += "+00:00"
-    return text
-
-
-def _safe_upload_filename(filename: str) -> str:
-    name = Path(filename).name
-    sanitized = "".join(character for character in name if character.isalnum() or character in "._-")
-    return sanitized or "upload.fits"
-
-
-def _record_from_fits_observation(observation: Any, observation_id: str, local_name: str) -> dict[str, Any]:
-    header = observation.header
-    detector = header.get("DETECTOR")
-    return {
-        "observation_id": observation_id,
-        "source_url": None,
-        "query_url": None,
-        "retrieved_at": datetime.now(timezone.utc).isoformat(),
-        "epoch": _iso_epoch_string(header.get("DATE-OBS")),
-        "band": str(detector) if detector is not None else None,
-        "ra": header.get("CRVAL1"),
-        "dec": header.get("CRVAL2"),
-        "header": header,
-        "local_path": local_name,
-        "storage_path": None,
-        "preview_storage_path": None,
-        "asset_status": "preview_available",
-        "source": "upload",
-    }
 
 
 _CATALOG_TTL_SECONDS = 30.0
