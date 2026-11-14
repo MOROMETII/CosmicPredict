@@ -10,6 +10,15 @@ export type Observation = {
   asset_status: string;
 };
 
+export type GaiaMatch = {
+  source_id: string;
+  separation_arcsec: number;
+  g_mag: number | null;
+  pm_total_mas_yr: number | null;
+  parallax_mas: number | null;
+  variable_flag: string | null;
+};
+
 export type Candidate = {
   candidate_id: string;
   source: string;
@@ -21,7 +30,33 @@ export type Candidate = {
   area: number;
   score: number;
   coordinate_space: string;
+  ra: number | null;
+  dec: number | null;
+  gaia_match: GaiaMatch | null;
+  gaia_checked: boolean;
+  interpretation: string | null;
   caveat: string;
+};
+
+export type GaiaOverlaySource = {
+  source_id: string;
+  ra: number;
+  dec: number;
+  g_mag: number | null;
+  pm_total_mas_yr: number | null;
+  variable_flag: string | null;
+  x_frac: number;
+  y_frac: number;
+};
+
+export type GaiaOverlay = {
+  status: string;
+  ra: number;
+  dec: number;
+  fov_arcmin: number;
+  sources: GaiaOverlaySource[];
+  caveats: string[];
+  message: string | null;
 };
 
 export type Analysis = {
@@ -142,15 +177,93 @@ export async function getSpectrum(ra: number, dec: number): Promise<Spectrum> {
   return request<Spectrum>(`/spectrum?ra=${ra}&dec=${dec}`);
 }
 
-export type FetchRegionResult = { status: string; region: string; frames: number };
+export type FetchRegionResult = {
+  status: "fetching" | "already_fetched" | "failed" | string;
+  region: string;
+  frames?: number;
+  message?: string | null;
+};
 
-/** Ask the backend to pull small cutouts of this position from the live NASA archive. */
+/**
+ * Ask the backend to pull small cutouts of this position from the live NASA
+ * archive. The download runs in the background: repeat the same call to poll
+ * until status is "already_fetched" (done) or "failed".
+ */
 export async function fetchRegion(ra: number, dec: number): Promise<FetchRegionResult> {
   return request<FetchRegionResult>(`/fetch_region?ra=${ra}&dec=${dec}`, { method: "POST" });
 }
 
 export async function getHealth(): Promise<Health> {
   return request<Health>("/health");
+}
+
+export type FeedItem = {
+  ra: number;
+  dec: number;
+  fov_arcmin: number;
+  band: string | null;
+  n_frames: number;
+  region_key: string;
+};
+
+export type Feed = {
+  status: string;
+  items: FeedItem[];
+  caveats: string[];
+  message: string | null;
+};
+
+export type Mark = {
+  id: string;
+  created_at: string;
+  ra: number;
+  dec: number;
+  spot_ra: number | null;
+  spot_dec: number | null;
+  fov_arcmin: number;
+  band: string | null;
+  observation_id: string | null;
+  epoch: string | null;
+  note: string | null;
+  source: string;
+  preview_url: string | null;
+  caveat: string;
+};
+
+export type MarkCreate = {
+  ra: number;
+  dec: number;
+  fov_arcmin: number;
+  band?: string | null;
+  observation_id?: string | null;
+  epoch?: string | null;
+  note?: string | null;
+  source?: string;
+  x_frac?: number | null;
+  y_frac?: number | null;
+};
+
+/** Scrollable tiles (real multi-epoch sky positions) for the reel view. */
+export async function getFeed(): Promise<Feed> {
+  return request<Feed>("/feed");
+}
+
+export async function getMarks(): Promise<{ status: string; marks: Mark[] }> {
+  return request<{ status: string; marks: Mark[] }>("/marks");
+}
+
+/** Save a "this looks suspicious" flag; a tapped spot is converted to sky coordinates server-side. */
+export async function createMark(payload: MarkCreate): Promise<Mark> {
+  return request<Mark>("/marks", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function deleteMark(id: string): Promise<void> {
+  await request<{ status: string }>(`/marks/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+/** Known Gaia DR3 catalog stars inside the current cutout frame (ESA archive, cached). */
+export async function getGaiaOverlay(ra: number, dec: number, fov = 15): Promise<GaiaOverlay> {
+  return request<GaiaOverlay>(`/gaia?ra=${ra}&dec=${dec}&fov=${fov}`);
 }
 
 /** Change detection on the WCS-aligned cutout grid at (ra, dec) — matches the player frames. */

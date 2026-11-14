@@ -97,14 +97,20 @@ snapshot files**.
 | `POST /api/analyze_region` | Noise-normalized change detection on the aligned cutout grid; returns ≥5σ candidate regions with caveats |
 | `GET /api/diff/aligned?...` | Difference image (red = brighter in A, blue = brighter in B) |
 | `GET /api/spectrum?ra&dec` | Brightness of the position in every covering observation (peak minus background) — powers the light-curve panel |
-| `POST /api/fetch_region?ra&dec` | Fetch time-spread cutouts of a new position from the live IRSA archive (bounded, polite, ledgered) |
+| `GET /api/gaia?ra&dec&fov` | Known ESA Gaia DR3 stars inside the aligned frame, with in-frame positions for the overlay (live TAP query, disk-cached for offline demos) |
+| `GET /api/feed` | Scrollable tiles for the Sky Scroll reel view — real positions whose footprints verifiably contain ≥2 epochs of one band |
+| `GET/POST /api/marks`, `DELETE /api/marks/{id}` | User "suspicious" flags (personal bookmarks, stored in `data/marks.json`); a tapped in-frame spot is converted to sky coordinates server-side |
+| `POST /api/fetch_region?ra&dec` | Start a background fetch of time-spread cutouts from the live IRSA archive (bounded, polite, ledgered). Answers immediately; poll the same request until `status` is `already_fetched` or `failed` |
 | `GET /api/epochs`, `GET /api/images`, `POST /api/diff`, `POST /api/analyze` | Legacy whole-image routes (unaligned; kept for compatibility) |
 
 ## Architecture
 
 - `frontend/` — Next.js + React + MUI. Epoch player with blink mode, A/B
   comparison with candidate overlays, light-curve panel, optional 3-D view.
-  No FITS parsing or science in the browser.
+  `/scroll` is **Sky Scroll**: a reels-style vertical feed that auto-replays
+  real multi-epoch tiles; tap a spot to pin it and flag it as suspicious.
+  `/flags` is the review queue for everything flagged. No FITS parsing or
+  science in the browser.
 - `backend/astronomy/` — FITS loading with quality masks (`fits_loader`),
   WCS-aligned north-up cutouts (`cutout`), uncertainty-aware difference imaging
   (`difference`), display rendering (`render`).
@@ -125,6 +131,43 @@ The suite builds synthetic FITS fixtures with known WCS rotations/offsets and an
 injected moving source, then verifies that alignment lands a fixed star on the
 same pixel across epochs, the mover is detected at >5σ, and the fixed star is
 not flagged.
+
+## NASA data & resources — how each one is used
+
+This project is an entry to the [NASA Space Apps Challenge 2026 — Planet X and
+SPHEREx](https://www.spaceappschallenge.org/2026/challenges/planet-x-and-spherex/?tab=resources).
+Every resource below is *integrated*, not just cited:
+
+- [SPHEREx data at NASA/IPAC IRSA](https://irsa.ipac.caltech.edu/Missions/spherex.html)
+  ([DOI 10.26131/IRSA652](https://doi.org/10.26131/IRSA652)) — the primary
+  dataset. Every frame in the app is a real Level-2 SPHEREx image, queried
+  live through the [IRSA SIA API](https://irsa.ipac.caltech.edu/docs/program_interface/api_images.html)
+  and downloaded as server-side cutouts (`backend/storage/live_archive.py`).
+- [SPHEREx tutorial notebooks](https://caltech-ipac.github.io/irsa-tutorials/) —
+  the documented Python access patterns (SIA discovery + IBE `?center&size`
+  cutouts) that our on-demand fetch pipeline follows.
+- [ESA Gaia Mission Data (DR3)](https://gea.esac.esa.int/archive/) — actively
+  queried via TAP (`backend/storage/gaia.py`). Powers two features: the
+  **known-star overlay** in the player (ring every catalogued star, so a
+  changing dot *without* a ring is immediately interesting), and the
+  **candidate cross-match** — every flagged change is automatically checked
+  against Gaia DR3 and labelled "known star" (with magnitude, proper motion
+  and variability flag) or "not in star catalog". A faint solar-system body —
+  a Planet X — would not be in Gaia's optical catalog; that is the point of
+  the check. Results are disk-cached so demos work offline.
+- [WiseView](http://byw.tools/wiseview) (NASA WISE) — the public-discovery
+  tool this app is modelled on, and an active verification step: every
+  candidate's detail panel deep-links to WiseView at the candidate's exact
+  coordinates, so users can blink 10+ years of WISE infrared imagery to
+  confirm or reject slow movers.
+- [NASA SPHEREx mission](https://science.nasa.gov/mission/spherex/) — mission
+  facts in the public-facing explainer.
+- [Astropy](https://www.astropy.org/) (`astropy.io.fits`, `astropy.wcs`,
+  `astropy.visualization`) — FITS parsing, WCS alignment, display stretches.
+
+Data acknowledgment: SPHEREx data courtesy NASA/JPL-Caltech/IPAC-IRSA; Gaia
+data from ESA's Gaia mission, processed by DPAC. This is an independent
+project, not affiliated with or endorsed by NASA or ESA.
 
 ## Scientific integrity
 

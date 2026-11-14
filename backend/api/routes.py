@@ -19,6 +19,14 @@ from backend.api.schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
     EpochsResponse,
+    FeedItem,
+    FeedResponse,
+    GaiaMatchResponse,
+    GaiaOverlayResponse,
+    GaiaSourceResponse,
+    MarkCreateRequest,
+    MarkResponse,
+    MarksResponse,
     ObservationResponse,
     SpectrumPoint,
     SpectrumResponse,
@@ -458,6 +466,85 @@ def _aligned_pair(
     return cutouts[0], cutouts[1]
 
 
+# Match radius for "does this candidate coincide with a known star": generous
+# relative to SPHEREx's ~6 arcsec pixels and the display-grade alignment.
+_GAIA_MATCH_RADIUS_ARCSEC = 10.0
+
+
+def _enrich_candidates_with_gaia(
+    candidates: list[dict[str, Any]], ra: float, dec: float, fov: float, size: int
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Attach WCS sky coordinates and a Gaia DR3 cross-match to each candidate.
+
+    Degrades honestly: when the Gaia archive is unreachable and uncached, the
+    candidates keep ``gaia_checked=False`` and a caveat says the catalog
+    check did not run — absence of a match is then meaningless.
+    """
+    from backend.storage import gaia
+
+    caveats: list[str] = []
+    if not candidates:
+        return candidates, caveats
+    grid = cutout_module.aligned_grid_wcs(ra, dec, fov, size)
+    centers = [
+        (candidate["column"] + candidate["width"] / 2.0, candidate["row"] + candidate["height"] / 2.0)
+        for candidate in candidates
+    ]
+    sky = grid.wcs_pix2world(centers, 0)
+    for candidate, (candidate_ra, candidate_dec) in zip(candidates, sky):
+        candidate["ra"] = round(float(candidate_ra) % 360.0, 6)
+        candidate["dec"] = round(float(candidate_dec), 6)
+
+    try:
+        # Cover the whole frame (half-diagonal) so every candidate is inside.
+        sources, _ = gaia.cone_search(ra, dec, radius_arcmin=fov * 0.75)
+    except gaia.GaiaUnavailableError:
+        caveats.append(
+            "Gaia DR3 cross-match unavailable (archive unreachable, no cache) — "
+            "candidates are NOT checked against the star catalog this time."
+        )
+        return candidates, caveats
+
+    for candidate in candidates:
+        candidate["gaia_checked"] = True
+        best: tuple[float, gaia.GaiaSource] | None = None
+        for source in sources:
+            separation = _angular_separation(candidate["ra"], candidate["dec"], source.ra, source.dec) * 3600.0
+            if separation <= _GAIA_MATCH_RADIUS_ARCSEC and (best is None or separation < best[0]):
+                best = (separation, source)
+        if best is None:
+            candidate["interpretation"] = (
+                "No catalogued Gaia DR3 star within "
+                f"{_GAIA_MATCH_RADIUS_ARCSEC:.0f}″ — this change is not explained by the optical star "
+                "catalog, which makes it worth closer inspection (a faint solar-system body would not be in Gaia)."
+            )
+            continue
+        separation, source = best
+        candidate["gaia_match"] = GaiaMatchResponse(
+            source_id=source.source_id,
+            separation_arcsec=round(separation, 2),
+            g_mag=source.g_mag,
+            pm_total_mas_yr=None if source.pm_total is None else round(source.pm_total, 2),
+            parallax_mas=source.parallax,
+            variable_flag=source.variable_flag,
+        )
+        descriptors = []
+        if source.variable_flag == "VARIABLE":
+            descriptors.append("catalogued as photometrically variable")
+        if source.pm_total is not None and source.pm_total > 100.0:
+            descriptors.append(f"high proper motion ({source.pm_total:.0f} mas/yr)")
+        detail = f" ({', '.join(descriptors)})" if descriptors else ""
+        candidate["interpretation"] = (
+            f"Coincides with known star Gaia DR3 {source.source_id}"
+            f"{detail} at {separation:.1f}″ — most plausibly that star varying or drifting, not a new object."
+        )
+    caveats.append(
+        "Candidates are cross-matched against the Gaia DR3 star catalog (ESA) within "
+        f"{_GAIA_MATCH_RADIUS_ARCSEC:.0f}″; a match suggests a known star, not a new object."
+    )
+    return candidates, caveats
+
+
 _ALIGNED_CAVEATS = [
     "Both epochs are resampled onto the same north-up sky grid before subtraction (display-grade alignment).",
     "Candidates are regions exceeding a 5-sigma noise-normalized threshold; they are unclassified and not confirmed detections.",
@@ -502,19 +589,23 @@ def analyze_region(request: AnalyzeRegionRequest) -> AnalyzeResponse:
         f"/api/diff/aligned?context_epoch={request.context_epoch}&target_epoch={request.target_epoch}"
         f"&ra={request.ra}&dec={request.dec}&fov={request.fov_arcmin}&size={request.size}"
     )
+    candidates = _candidates_from_map(
+        np.abs(significance),
+        source="significance",
+        coordinate_space="aligned_cutout_pixel",
+        minimum_score=5.0,
+    )
+    candidates, gaia_caveats = _enrich_candidates_with_gaia(
+        candidates, request.ra, request.dec, request.fov_arcmin, request.size
+    )
     return AnalyzeResponse(
         status="ok",
         context_epoch=request.context_epoch,
         target_epoch=request.target_epoch,
         difference_score=difference_score,
         difference_image_url=difference_image_url,
-        candidates=_candidates_from_map(
-            np.abs(significance),
-            source="significance",
-            coordinate_space="aligned_cutout_pixel",
-            minimum_score=5.0,
-        ),
-        caveats=_ALIGNED_CAVEATS,
+        candidates=candidates,
+        caveats=_ALIGNED_CAVEATS + gaia_caveats,
     )
 
 
@@ -529,18 +620,251 @@ def fetch_region(
     65 MB products) into the local cache; the catalog picks them up on its next
     refresh. Bounded and polite: at most 8 frames, rate-limited, remembered in
     a ledger so repeat requests cost nothing.
+
+    The download runs on a background thread (a full fetch takes minutes,
+    longer than HTTP proxies keep a request open). The response is immediate;
+    repeat the same request to poll until ``status`` is ``already_fetched``
+    (success) or ``failed``.
     """
     from backend.storage import live_archive
 
-    try:
-        result = live_archive.fetch_region(ra, dec)
-    except live_archive.LiveArchiveError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-    except OSError as error:
-        raise HTTPException(status_code=502, detail=f"live archive fetch failed: {error}") from error
-    # New files invalidate the catalog cache so the next /timeline sees them.
-    _catalog_cache["expires_at"] = 0.0
+    result = live_archive.start_fetch(ra, dec)
+    if result["status"] == "already_fetched":
+        # New files invalidate the catalog cache so the next /timeline sees them.
+        _catalog_cache["expires_at"] = 0.0
     return result
+
+
+def _feed_positions() -> list[tuple[float, float, str]]:
+    """Candidate feed centers: fetched regions (exact) plus coarse 1-degree cells.
+
+    Observation record centers are exposure pointings that scatter over
+    degrees between visits of one target, so grouping must not rely on them;
+    each candidate position is validated against real detector footprints
+    afterwards.
+    """
+    from backend.storage import live_archive
+
+    positions: list[tuple[float, float, str]] = []
+    for key in live_archive.list_regions():
+        try:
+            ra_text, dec_text = key.split(",")
+            positions.append((float(ra_text) % 360.0, float(dec_text), key))
+        except ValueError:
+            continue
+    for record in _catalog().values():
+        if record.ra is None or record.dec is None:
+            continue
+        cell_ra, cell_dec = round(record.ra), round(record.dec)
+        if any(_angular_separation(cell_ra, cell_dec, ra, dec) < 0.7 for ra, dec, _ in positions):
+            continue
+        positions.append((float(cell_ra % 360), float(cell_dec), f"{cell_ra},{cell_dec}"))
+    return positions
+
+
+_feed_cache: dict[tuple[int, float, int], FeedResponse] = {}
+
+
+@router.get("/feed", response_model=FeedResponse)
+def feed(
+    fov: float = Query(default=12.0, ge=0.5, le=60.0),
+    limit: int = Query(default=40, ge=1, le=100),
+) -> FeedResponse:
+    """Scrollable tiles for the reel view: real sky positions with a verified multi-epoch series.
+
+    Each tile is a position whose detector footprints actually contain it in
+    at least two epochs of one band (same validation as /timeline). Regions
+    are interleaved so scrolling varies, and offset tiles show more of each
+    region than just its center.
+    """
+    cache_key = (len(_catalog()), fov, limit)
+    cached = _feed_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    records = list(_catalog().values())
+    half_fov_deg = fov / 60.0 / 2.0
+    per_region: list[list[FeedItem]] = []
+    for center_ra, center_dec, key in _feed_positions():
+        # Cheap prefilter: a SPHEREx detector spans ~3.5 degrees, so only
+        # nearby exposures can possibly contain this position.
+        nearby = [
+            record
+            for record in records
+            if record.ra is not None
+            and record.dec is not None
+            and _angular_separation(center_ra, center_dec, record.ra, record.dec) < 3.0
+        ]
+        cos_dec = max(float(np.cos(np.deg2rad(center_dec))), 0.05)
+        items: list[FeedItem] = []
+        for dx, dy in ((0.0, 0.0), (1.0, 1.0), (-1.0, 1.0), (1.0, -1.0), (-1.0, -1.0)):
+            tile_ra = (center_ra + dx * half_fov_deg / cos_dec) % 360.0
+            tile_dec = float(np.clip(center_dec + dy * half_fov_deg, -90.0, 90.0))
+            by_band: dict[str, list[ObservationResponse]] = {}
+            for record in nearby:
+                if cutout_module.contains_position(record.provenance.get("header") or {}, tile_ra, tile_dec):
+                    by_band.setdefault(record.band or "unknown", []).append(record)
+            if not by_band:
+                continue
+            band = max(by_band, key=lambda b: len({r.epoch for r in by_band[b]}))
+            covering = by_band[band]
+            if len({record.epoch for record in covering}) < 2:
+                continue
+            items.append(
+                FeedItem(
+                    ra=round(tile_ra, 5),
+                    dec=round(tile_dec, 5),
+                    fov_arcmin=fov,
+                    band=band,
+                    n_frames=len(covering),
+                    region_key=key,
+                )
+            )
+        if items:
+            per_region.append(items)
+
+    # Interleave regions so consecutive tiles are usually different sky.
+    interleaved: list[FeedItem] = []
+    while per_region and len(interleaved) < limit:
+        for items in list(per_region):
+            interleaved.append(items.pop(0))
+            if not items:
+                per_region.remove(items)
+            if len(interleaved) >= limit:
+                break
+    response = FeedResponse(
+        status="ok" if interleaved else "empty",
+        items=interleaved,
+        caveats=[
+            "Every tile replays real SPHEREx observations; nothing in the feed is synthetic.",
+            "Tiles come from the locally cached regions — fetch more positions to grow the feed.",
+        ],
+        message=None if interleaved else "No cached region has two epochs yet. Fetch a position from the archive first.",
+    )
+    if len(_feed_cache) >= 8:
+        _feed_cache.pop(next(iter(_feed_cache)))
+    _feed_cache[cache_key] = response
+    return response
+
+
+@router.get("/marks", response_model=MarksResponse)
+def list_marks() -> MarksResponse:
+    from backend.storage import marks as marks_store
+
+    return MarksResponse(
+        status="ok",
+        marks=[MarkResponse(**mark) for mark in marks_store.list_marks()],
+        caveats=["Flags are personal bookmarks for follow-up review, not detections."],
+    )
+
+
+@router.post("/marks", response_model=MarkResponse)
+def create_mark(request: MarkCreateRequest) -> MarkResponse:
+    """Save a user flag; a tapped in-frame spot is converted to sky coordinates server-side."""
+    from backend.storage import marks as marks_store
+
+    spot_ra = spot_dec = None
+    if request.x_frac is not None and request.y_frac is not None:
+        size = 256
+        grid = cutout_module.aligned_grid_wcs(request.ra, request.dec, request.fov_arcmin, size)
+        sky = grid.wcs_pix2world([[request.x_frac * size - 0.5, request.y_frac * size - 0.5]], 0)[0]
+        spot_ra, spot_dec = round(float(sky[0]) % 360.0, 6), round(float(sky[1]), 6)
+    preview_url = None
+    if request.observation_id and request.observation_id in _catalog():
+        preview_url = (
+            f"/api/cutout/{request.observation_id}?ra={request.ra}&dec={request.dec}"
+            f"&fov={request.fov_arcmin}&size=256"
+        )
+    note = request.note.strip() if request.note else None
+    mark = marks_store.add_mark(
+        {
+            "ra": request.ra,
+            "dec": request.dec,
+            "spot_ra": spot_ra,
+            "spot_dec": spot_dec,
+            "fov_arcmin": request.fov_arcmin,
+            "band": request.band,
+            "observation_id": request.observation_id,
+            "epoch": request.epoch,
+            "note": note or None,
+            "source": request.source,
+            "preview_url": preview_url,
+        }
+    )
+    return MarkResponse(**mark)
+
+
+@router.delete("/marks/{mark_id}")
+def delete_mark(mark_id: str) -> dict[str, str]:
+    from backend.storage import marks as marks_store
+
+    if not marks_store.delete_mark(mark_id):
+        raise HTTPException(status_code=404, detail=f"unknown mark: {mark_id}")
+    return {"status": "deleted", "id": mark_id}
+
+
+@router.get("/gaia", response_model=GaiaOverlayResponse)
+def gaia_overlay(
+    ra: float = Query(..., ge=0, lt=360),
+    dec: float = Query(..., ge=-90, le=90),
+    fov: float = Query(default=15.0, ge=0.5, le=240.0, description="field of view in arcminutes"),
+) -> GaiaOverlayResponse:
+    """Catalogued Gaia DR3 stars inside the aligned cutout frame at (ra, dec).
+
+    Positions are projected through the same WCS grid the cutout PNGs use, so
+    the frontend can overlay known stars without doing any sky math. Live ESA
+    archive query with a disk cache (offline-demo safe); when neither works
+    the endpoint says so instead of returning an empty sky.
+    """
+    from backend.storage import gaia
+
+    try:
+        sources, provenance = gaia.cone_search(ra, dec, radius_arcmin=fov * 0.75)
+    except gaia.GaiaUnavailableError as error:
+        return GaiaOverlayResponse(
+            status="unavailable",
+            ra=ra,
+            dec=dec,
+            fov_arcmin=fov,
+            message=f"Gaia DR3 catalog is unreachable and not cached for this region ({error}).",
+        )
+
+    size = 256  # fractional positions are size-independent; any grid works
+    grid = cutout_module.aligned_grid_wcs(ra, dec, fov, size)
+    in_frame: list[GaiaSourceResponse] = []
+    if sources:
+        pixels = grid.wcs_world2pix([[source.ra, source.dec] for source in sources], 0)
+        for source, (x, y) in zip(sources, pixels):
+            if not (np.isfinite(x) and np.isfinite(y)):
+                continue
+            x_frac, y_frac = (float(x) + 0.5) / size, (float(y) + 0.5) / size
+            if not (0.0 <= x_frac <= 1.0 and 0.0 <= y_frac <= 1.0):
+                continue
+            in_frame.append(
+                GaiaSourceResponse(
+                    source_id=source.source_id,
+                    ra=source.ra,
+                    dec=source.dec,
+                    g_mag=source.g_mag,
+                    pm_total_mas_yr=None if source.pm_total is None else round(source.pm_total, 2),
+                    variable_flag=source.variable_flag,
+                    x_frac=round(x_frac, 4),
+                    y_frac=round(y_frac, 4),
+                )
+            )
+    return GaiaOverlayResponse(
+        status="ok",
+        ra=ra,
+        dec=dec,
+        fov_arcmin=fov,
+        sources=in_frame,
+        provenance=provenance,
+        caveats=[
+            "Gaia DR3 is an optical catalog: very red, dust-obscured, or solar-system objects can be "
+            "bright in SPHEREx's infrared yet absent here.",
+            "Only the brightest 200 catalog stars in the search radius are considered.",
+        ],
+    )
 
 
 _spectrum_cache: dict[tuple[float, float, int], SpectrumResponse] = {}
