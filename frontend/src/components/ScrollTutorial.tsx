@@ -113,8 +113,7 @@ const STEPS: Step[] = [
       <Stack spacing={1.5} sx={{ mt: 0.5 }}>
         <ControlRow icon={<TouchApp />} term="Tap once" text="pin the exact spot you are looking at (an amber ring appears)." />
         <ControlRow icon={<BookmarkAdd />} term="Double-tap" text="flag the spot immediately, without a note." />
-        <ControlRow icon={<PanTool />} term="Press and hold" text="pause the replay while you look closely." />
-        <Typography variant="body2" sx={{ color: nasa.muted }}>
+        <ControlRow icon={<PanTool />} term="Press and hold" text="pause the replay while you look closely." />        <Typography variant="body2" sx={{ color: nasa.muted }}>
           Pinned spots are converted to real sky coordinates on the server, so a flag can be
           re-examined later with full precision.
         </Typography>
