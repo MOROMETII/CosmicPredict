@@ -205,6 +205,12 @@ export type FeedItem = {
   band: string | null;
   n_frames: number;
   region_key: string;
+  score: number;
+  flags: number;
+  comments: number;
+  gifs: number;
+  people: number;
+  saves: number;
 };
 
 export type Feed = {
@@ -240,6 +246,7 @@ export type MarkCreate = {
   epoch?: string | null;
   note?: string | null;
   source?: string;
+  region_key?: string | null;
   x_frac?: number | null;
   y_frac?: number | null;
 };
@@ -258,8 +265,101 @@ export async function createMark(payload: MarkCreate): Promise<Mark> {
   return request<Mark>("/marks", { method: "POST", body: JSON.stringify(payload) });
 }
 
+/** Double-tap save (like) a sky region. */
+export async function saveRegion(regionKey: string): Promise<{ id: string; region_key: string; created_at: string }> {
+  return request<{ id: string; region_key: string; created_at: string }>("/saves", {
+    method: "POST",
+    body: JSON.stringify({ region_key: regionKey }),
+  });
+}
+
+export async function getSaveCount(regionKey: string): Promise<{ status: string; region_key: string; count: number }> {
+  return request<{ status: string; region_key: string; count: number }>(`/saves?region_key=${encodeURIComponent(regionKey)}`);
+}
+
+export type SurveyItem = {
+  region_key: string;
+  ra: number;
+  dec: number;
+  score: number;
+  flags: number;
+  comments: number;
+  gifs: number;
+  people: number;
+  saves: number;
+};
+
+export type Survey = {
+  status: string;
+  regions: SurveyItem[];
+  caveats: string[];
+};
+
+/** Engagement leaderboard: every interacted region, ranked by score. */
+export async function getSurvey(): Promise<Survey> {
+  return request<Survey>("/survey");
+}
+
 export async function deleteMark(id: string): Promise<void> {
   await request<{ status: string }>(`/marks/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export type Comment = {
+  id: string;
+  region_key: string;
+  author: string;
+  body: string;
+  gif_url: string | null;
+  gif_still_url: string | null;
+  gif_title: string | null;
+  created_at: string;
+};
+
+export type Comments = {
+  status: string;
+  region_key: string;
+  comments: Comment[];
+  caveats: string[];
+};
+
+export type CommentDraft = {
+  body?: string;
+  gif_url?: string | null;
+  gif_still_url?: string | null;
+  gif_title?: string | null;
+};
+
+/** Comments on one sky region (the Sky Scroll reel). */
+export async function getComments(regionKey: string): Promise<Comments> {
+  return request<Comments>(`/comments?region_key=${encodeURIComponent(regionKey)}`);
+}
+
+/** Post a comment on a sky region. */
+export async function createComment(
+  regionKey: string,
+  body: string,
+  author?: string,
+  gif?: CommentDraft,
+): Promise<Comment> {
+  return request<Comment>("/comments", {
+    method: "POST",
+    body: JSON.stringify({ region_key: regionKey, body, author, ...gif }),
+  });
+}
+
+export type Gif = {
+  id: string;
+  title: string;
+  preview_url: string;
+  gif_url: string;
+};
+
+/** Search GIFs via the backend (Giphy proxy with a curated fallback). */
+export async function searchGifs(query: string): Promise<Gif[]> {
+  const result = await request<{ status: string; query: string; gifs: Gif[] }>(
+    `/gifs?query=${encodeURIComponent(query)}`,
+  );
+  return result.gifs;
 }
 
 /** Known Gaia DR3 catalog stars inside the current cutout frame (ESA archive, cached). */
