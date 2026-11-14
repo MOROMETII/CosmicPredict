@@ -60,6 +60,7 @@ const toObservation = (frame: TimelineFrame): Observation => ({
   observation_id: frame.observation_id,
   epoch: frame.epoch,
   band: frame.band,
+  wavelength: frame.wavelength,
   ra: null,
   dec: null,
   source: frame.source,
