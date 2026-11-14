@@ -46,10 +46,13 @@ SUPABASE_BUCKET: str = getenv("SUPABASE_BUCKET", "spherex-images") or "spherex-i
 SPHEREX_SIA_URL: str | None = getenv("SPHEREX_SIA_URL")
 JEPA_CHECKPOINT: Path = Path(getenv("JEPA_CHECKPOINT", "models/checkpoints/jepa.pt") or "models/checkpoints/jepa.pt")
 RAW_DIR: Path = Path(getenv("DATA_RAW_DIR", "data/raw") or "data/raw")
+SNAPSHOT_DIR: Path = Path(getenv("DATA_SNAPSHOT_DIR", "data/snapshots") or "data/snapshots")
 if not RAW_DIR.is_absolute():
     RAW_DIR = REPO_ROOT / RAW_DIR
 if not JEPA_CHECKPOINT.is_absolute():
     JEPA_CHECKPOINT = REPO_ROOT / JEPA_CHECKPOINT
+if not SNAPSHOT_DIR.is_absolute():
+    SNAPSHOT_DIR = REPO_ROOT / SNAPSHOT_DIR
 
 
 def supabase_configured() -> bool:

@@ -33,6 +33,7 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 sys.path.insert(0, str(REPO_ROOT))
 
 import download_data  # noqa: E402
+from backend.astronomy import compact  # noqa: E402
 from backend.astronomy.calibration import robust_normalize  # noqa: E402
 from backend.astronomy.fits_loader import load_fits_observation  # noqa: E402
 from backend.storage import upload_observation  # noqa: E402
@@ -51,7 +52,7 @@ def _iso_epoch(value: Any) -> str | None:
     return text
 
 
-def parse_image(raw_path: Path, parsed_dir: Path, index: int) -> dict[str, Any]:
+def parse_image(raw_path: Path, parsed_dir: Path, index: int) -> tuple[dict[str, Any], Any]:
     """Parse one downloaded FITS file into a normalized, masked ``.npz``."""
 
     observation = load_fits_observation(raw_path)
@@ -72,7 +73,7 @@ def parse_image(raw_path: Path, parsed_dir: Path, index: int) -> dict[str, Any]:
             "fill_value": calibrated.fill_value,
         },
         "provenance": observation.header,
-    }
+    }, observation
 
 
 def scrape(
@@ -118,7 +119,7 @@ def scrape(
             continue
         raw_path = raw_dir / filename
         try:
-            parsed = parse_image(raw_path, parsed_dir, index)
+            parsed, observation = parse_image(raw_path, parsed_dir, index)
         except (OSError, ValueError, TypeError) as error:
             error_record = {"source_path": str(raw_path), "error": str(error)}
             errors.append(error_record)
@@ -147,9 +148,8 @@ def scrape(
         try:
             record = upload_observation(
                 record,
-                raw_bytes=raw_path.read_bytes(),
-                parsed_bytes=(parsed_dir / parsed["parsed_path"]).read_bytes(),
-                parsed_path=parsed["parsed_path"],
+                snapshot_bytes=compact.observation_to_bytes(observation),
+                snapshot_name=f"{Path(filename).stem}.npz",
             )
         except OSError as error:
             print(f"could not read local asset for {filename}: {error}", file=sys.stderr)
