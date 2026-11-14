@@ -2,6 +2,7 @@ export type Observation = {
   observation_id: string;
   epoch: string | null;
   band: string | null;
+  wavelength: number | null;
   ra: number | null;
   dec: number | null;
   source: "cached" | "live" | string;
