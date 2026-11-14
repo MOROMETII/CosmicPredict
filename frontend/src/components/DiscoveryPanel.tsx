@@ -78,10 +78,10 @@ export default function DiscoveryPanel({ candidate, pixelScaleArcsec }: Props) {
         {candidate.gaia_checked ? (
           candidate.gaia_match ? (
             <>
-              <Typography variant="body2">
+        
                 <Chip size="small" label="KNOWN STAR" sx={{ mr: 1, bgcolor: "rgba(120,160,255,.2)", fontSize: 11 }} />
                 {candidate.interpretation}
-              </Typography>
+            
               <Typography variant="caption" color="text.secondary">
                 Gaia DR3 {candidate.gaia_match.source_id}
                 {candidate.gaia_match.g_mag != null && ` · G=${candidate.gaia_match.g_mag.toFixed(1)}`}
@@ -91,11 +91,11 @@ export default function DiscoveryPanel({ candidate, pixelScaleArcsec }: Props) {
               </Typography>
             </>
           ) : (
-            <Typography variant="body2">
+            <>
               <Chip size="small" label="NOT IN CATALOG" sx={{ mr: 1, bgcolor: "rgba(255,180,80,.25)", fontSize: 11 }} />
               {candidate.interpretation ??
                 "No catalogued Gaia DR3 star here — the change is not explained by the star catalog."}
-            </Typography>
+            </>
           )
         ) : (
           <Typography variant="body2" color="text.secondary">
