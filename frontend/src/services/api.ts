@@ -262,6 +262,34 @@ export async function deleteMark(id: string): Promise<void> {
   await request<{ status: string }>(`/marks/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+export type Comment = {
+  id: string;
+  region_key: string;
+  author: string;
+  body: string;
+  created_at: string;
+};
+
+export type Comments = {
+  status: string;
+  region_key: string;
+  comments: Comment[];
+  caveats: string[];
+};
+
+/** Comments on one sky region (the Sky Scroll reel). */
+export async function getComments(regionKey: string): Promise<Comments> {
+  return request<Comments>(`/comments?region_key=${encodeURIComponent(regionKey)}`);
+}
+
+/** Post a comment on a sky region. */
+export async function createComment(regionKey: string, body: string, author?: string): Promise<Comment> {
+  return request<Comment>("/comments", {
+    method: "POST",
+    body: JSON.stringify({ region_key: regionKey, body, author }),
+  });
+}
+
 /** Known Gaia DR3 catalog stars inside the current cutout frame (ESA archive, cached). */
 export async function getGaiaOverlay(ra: number, dec: number, fov = 15): Promise<GaiaOverlay> {
   return request<GaiaOverlay>(`/gaia?ra=${ra}&dec=${dec}&fov=${fov}`);
