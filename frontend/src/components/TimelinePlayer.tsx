@@ -388,7 +388,12 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
             </Box>
           )}
 
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.5, maxWidth: 640, mx: "auto" }}>
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            sx={{ mt: 1.5, maxWidth: 640, mx: "auto", flexWrap: "wrap", rowGap: 1 }}
+          >
             <Tooltip title="Previous date">
               <IconButton size="small" onClick={() => step(-1)}>
                 <SkipPrevious />
@@ -452,13 +457,19 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
                 <StarBorder sx={{ fontSize: 16 }} />
               </ToggleButton>
             </Tooltip>
-            <Select size="small" value={speedMs} onChange={(event) => setSpeedMs(Number(event.target.value))} sx={{ fontSize: 12 }}>
+            <Select
+              size="small"
+              value={speedMs}
+              onChange={(event) => setSpeedMs(Number(event.target.value))}
+              sx={{ fontSize: 12, flexShrink: 0 }}
+            >
               {SPEED_OPTIONS.map((option) => (
                 <MenuItem key={option.ms} value={option.ms} sx={{ fontSize: 12 }}>
                   {option.label}
                 </MenuItem>
               ))}
             </Select>
+            {/* Wraps onto its own full-width row when the controls fill the line. */}
             <Slider
               size="small"
               min={0}
@@ -468,7 +479,7 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
                 setPlaying(false);
                 setFrame(value as number);
               }}
-              sx={{ flex: 1 }}
+              sx={{ flex: 1, minWidth: 140, mx: 1 }}
             />
           </Stack>
 
