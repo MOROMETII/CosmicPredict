@@ -1,0 +1,2352 @@
+[0m
+> space-region-explorer · big-pickle
+[0m
+[0m$ [0mcurl -s http://localhost:8000/api/health
+{"status":"ok","provider":"cached","observation_count":19}
+[0m
+[0m$ [0mls scripts/ 2>/dev/null && ls data 2>/dev/null
+__pycache__
+backfill_supabase.py
+download_data.py
+explore_regions.py
+preprocess.py
+requirements-scrape.txt
+scrape.bat
+scrape.sh
+scrape_targets.py
+scrape_timeline.py
+scraper.py
+explorations
+raw
+[0m
+I'll start by confirming the backend is up and checking the explorer script's interface.
+[0m→ [0mRead scripts/explore_regions.py
+Backend is healthy (`provider: cached`, 19 observations). Let me inspect the explorer script and query the timeline for this position.
+[0m
+[0m$ [0mcurl -s "http://localhost:8000/api/timeline?ra=76.96&dec=30.40&fov=10"
+{"status":"ok","ra":76.96,"dec":30.4,"fov_arcmin":10.0,"band":"3","available_bands":{"3":3},"frames":[{"observation_id":"live_76p9600_30p4000_level2_2026W08_2A_0233_3D3_spx_l2bv272026227","epoch":"2026-02-20T17:20:32.679000Z","band":"3","wavelength":2.2133545875549316,"cutout_url":"/api/cutout/live_76p9600_30p4000_level2_2026W08_2A_0233_3D3_spx_l2bv272026227?ra=76.96&dec=30.4&fov=10.0&size=256&vmin=0.16044&vmax=9.76945","source":"live","coverage":1.0},{"observation_id":"live_76p9600_30p4000_level2_2026W10_1A_0120_1D3_spx_l2bv272026229","epoch":"2026-03-02T13:31:14.591000Z","band":"3","wavelength":2.2133545875549316,"cutout_url":"/api/cutout/live_76p9600_30p4000_level2_2026W10_1A_0120_1D3_spx_l2bv272026229?ra=76.96&dec=30.4&fov=10.0&size=256&vmin=0.16044&vmax=9.76945","source":"live","coverage":1.0},{"observation_id":"live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261","epoch":"2026-09-16T06:50:29.796000Z","band":"3","wavelength":2.2133545875549316,"cutout_url":"/api/cutout/live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261?ra=76.96&dec=30.4&fov=10.0&size=256&vmin=0.16044&vmax=9.76945","source":"live","coverage":1.0}],"caveats":["Frames are bilinearly resampled onto a shared north-up grid for alignment (display-grade).","All frames share one brightness scale, so brightness changes between dates are real signal (within calibration limits).","Gray areas are outside an exposure's detector footprint or masked as unreliable pixels.","Consecutive frames can be weeks or months apart; motion between frames is not continuous."],"message":null}
+[0m
+Three live epochs in band 3 for this position. Running the explorer at 10 arcmin FOV.
+[0m$ [0mpython3 scripts/explore_regions.py --ra 76.96 --dec 30.40 --fov 10 --out data/explorations
+...output truncated...
+
+Full output saved to: /home/ileab/.local/share/opencode/tool-output/tool_1d988e596001qENxa9rFt19CaQ
+
+      "height": 7,
+      "width": 8,
+      "area": 39,
+      "score": 232.21153259277344,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-125",
+      "row": 149,
+      "column": 50,
+      "height": 12,
+      "width": 11,
+      "area": 61,
+      "score": 208.75,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-126",
+      "row": 149,
+      "column": 31,
+      "height": 4,
+      "width": 3,
+      "area": 6,
+      "score": 231.9166717529297,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-127",
+      "row": 148,
+      "column": 243,
+      "height": 5,
+      "width": 7,
+      "area": 22,
+      "score": 215.6875,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-128",
+      "row": 147,
+      "column": 222,
+      "height": 4,
+      "width": 4,
+      "area": 8,
+      "score": 170.1999969482422,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-129",
+      "row": 147,
+      "column": 162,
+      "height": 12,
+      "width": 15,
+      "area": 96,
+      "score": 240.41802978515625,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-130",
+      "row": 146,
+      "column": 107,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 180.11111450195312,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-131",
+      "row": 145,
+      "column": 236,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 190.55555725097656,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-132",
+      "row": 145,
+      "column": 194,
+      "height": 19,
+      "width": 25,
+      "area": 257,
+      "score": 225.09027099609375,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-133",
+      "row": 145,
+      "column": 38,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 160.3333282470703,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-134",
+      "row": 143,
+      "column": 78,
+      "height": 7,
+      "width": 8,
+      "area": 35,
+      "score": 215.63043212890625,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-135",
+      "row": 143,
+      "column": 67,
+      "height": 10,
+      "width": 4,
+      "area": 21,
+      "score": 160.93939208984375,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-136",
+      "row": 142,
+      "column": 51,
+      "height": 4,
+      "width": 3,
+      "area": 6,
+      "score": 152.5833282470703,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-137",
+      "row": 139,
+      "column": 155,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 110.55555725097656,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-138",
+      "row": 138,
+      "column": 248,
+      "height": 4,
+      "width": 4,
+      "area": 8,
+      "score": 202.1999969482422,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-139",
+      "row": 138,
+      "column": 118,
+      "height": 8,
+      "width": 6,
+      "area": 29,
+      "score": 219.14999389648438,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-140",
+      "row": 134,
+      "column": 160,
+      "height": 12,
+      "width": 15,
+      "area": 127,
+      "score": 221.96621704101562,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-141",
+      "row": 133,
+      "column": 64,
+      "height": 7,
+      "width": 9,
+      "area": 42,
+      "score": 214.74545288085938,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-142",
+      "row": 133,
+      "column": 44,
+      "height": 5,
+      "width": 5,
+      "area": 15,
+      "score": 176.47825622558594,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-143",
+      "row": 133,
+      "column": 1,
+      "height": 29,
+      "width": 21,
+      "area": 264,
+      "score": 212.0527801513672,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-144",
+      "row": 130,
+      "column": 237,
+      "height": 5,
+      "width": 4,
+      "area": 12,
+      "score": 169.6999969482422,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-145",
+      "row": 130,
+      "column": 187,
+      "height": 4,
+      "width": 4,
+      "area": 8,
+      "score": 145.26666259765625,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-146",
+      "row": 129,
+      "column": 122,
+      "height": 7,
+      "width": 10,
+      "area": 42,
+      "score": 224.5,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-147",
+      "row": 127,
+      "column": 110,
+      "height": 5,
+      "width": 3,
+      "area": 8,
+      "score": 181.93333435058594,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-148",
+      "row": 123,
+      "column": 41,
+      "height": 5,
+      "width": 3,
+      "area": 8,
+      "score": 195.8000030517578,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-149",
+      "row": 122,
+      "column": 168,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 171.55555725097656,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-150",
+      "row": 120,
+      "column": 233,
+      "height": 5,
+      "width": 5,
+      "area": 15,
+      "score": 194.9130401611328,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-151",
+      "row": 120,
+      "column": 185,
+      "height": 5,
+      "width": 4,
+      "area": 11,
+      "score": 182.4736785888672,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-152",
+      "row": 120,
+      "column": 56,
+      "height": 11,
+      "width": 21,
+      "area": 85,
+      "score": 173.73451232910156,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-153",
+      "row": 119,
+      "column": 0,
+      "height": 9,
+      "width": 6,
+      "area": 32,
+      "score": 202.4545440673828,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-154",
+      "row": 117,
+      "column": 107,
+      "height": 4,
+      "width": 6,
+      "area": 15,
+      "score": 172.0416717529297,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-155",
+      "row": 116,
+      "column": 18,
+      "height": 38,
+      "width": 23,
+      "area": 309,
+      "score": 223.40086364746094,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-156",
+      "row": 114,
+      "column": 183,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 162.44444274902344,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-157",
+      "row": 114,
+      "column": 124,
+      "height": 46,
+      "width": 30,
+      "area": 534,
+      "score": 214.57676696777344,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-158",
+      "row": 114,
+      "column": 64,
+      "height": 6,
+      "width": 12,
+      "area": 42,
+      "score": 196.54385375976562,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-159",
+      "row": 113,
+      "column": 114,
+      "height": 14,
+      "width": 9,
+      "area": 67,
+      "score": 186.4588165283203,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-160",
+      "row": 111,
+      "column": 166,
+      "height": 5,
+      "width": 5,
+      "area": 14,
+      "score": 171.5238037109375,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-161",
+      "row": 111,
+      "column": 14,
+      "height": 11,
+      "width": 14,
+      "area": 97,
+      "score": 215.5042724609375,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-162",
+      "row": 110,
+      "column": 214,
+      "height": 5,
+      "width": 4,
+      "area": 11,
+      "score": 163.7894744873047,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-163",
+      "row": 110,
+      "column": 86,
+      "height": 30,
+      "width": 18,
+      "area": 235,
+      "score": 225.72598266601562,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-164",
+      "row": 110,
+      "column": 43,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 181.6666717529297,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-165",
+      "row": 108,
+      "column": 0,
+      "height": 6,
+      "width": 4,
+      "area": 13,
+      "score": 199.95237731933594,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-166",
+      "row": 106,
+      "column": 28,
+      "height": 9,
+      "width": 10,
+      "area": 60,
+      "score": 233.16000366210938,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-167",
+      "row": 105,
+      "column": 227,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 157.3333282470703,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-168",
+      "row": 105,
+      "column": 5,
+      "height": 5,
+      "width": 5,
+      "area": 13,
+      "score": 220.2857208251953,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-169",
+      "row": 104,
+      "column": 181,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 118.22222137451172,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-170",
+      "row": 103,
+      "column": 84,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 176.44444274902344,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-171",
+      "row": 102,
+      "column": 67,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 162.55555725097656,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-172",
+      "row": 101,
+      "column": 221,
+      "height": 4,
+      "width": 4,
+      "area": 8,
+      "score": 228.0,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-173",
+      "row": 101,
+      "column": 141,
+      "height": 7,
+      "width": 7,
+      "area": 28,
+      "score": 202.57894897460938,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-174",
+      "row": 101,
+      "column": 89,
+      "height": 4,
+      "width": 5,
+      "area": 11,
+      "score": 158.77777099609375,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-175",
+      "row": 101,
+      "column": 76,
+      "height": 7,
+      "width": 6,
+      "area": 27,
+      "score": 223.7567596435547,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-176",
+      "row": 100,
+      "column": 201,
+      "height": 7,
+      "width": 6,
+      "area": 25,
+      "score": 219.05714416503906,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-177",
+      "row": 98,
+      "column": 45,
+      "height": 6,
+      "width": 4,
+      "area": 14,
+      "score": 193.40908813476562,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-178",
+      "row": 95,
+      "column": 163,
+      "height": 4,
+      "width": 6,
+      "area": 13,
+      "score": 183.85714721679688,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-179",
+      "row": 93,
+      "column": 170,
+      "height": 3,
+      "width": 4,
+      "area": 6,
+      "score": 137.0,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-180",
+      "row": 93,
+      "column": 1,
+      "height": 7,
+      "width": 7,
+      "area": 32,
+      "score": 203.60464477539062,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-181",
+      "row": 91,
+      "column": 64,
+      "height": 5,
+      "width": 4,
+      "area": 11,
+      "score": 175.42105102539062,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-182",
+      "row": 90,
+      "column": 220,
+      "height": 8,
+      "width": 7,
+      "area": 34,
+      "score": 224.0,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-183",
+      "row": 90,
+      "column": 199,
+      "height": 7,
+      "width": 7,
+      "area": 32,
+      "score": 215.88372802734375,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-184",
+      "row": 90,
+      "column": 134,
+      "height": 11,
+      "width": 13,
+      "area": 65,
+      "score": 206.06097412109375,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-185",
+      "row": 90,
+      "column": 74,
+      "height": 7,
+      "width": 11,
+      "area": 36,
+      "score": 203.2452850341797,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-186",
+      "row": 89,
+      "column": 58,
+      "height": 5,
+      "width": 5,
+      "area": 14,
+      "score": 154.90908813476562,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-187",
+      "row": 88,
+      "column": 195,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 105.22222137451172,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-188",
+      "row": 87,
+      "column": 43,
+      "height": 5,
+      "width": 4,
+      "area": 11,
+      "score": 206.6842041015625,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-189",
+      "row": 86,
+      "column": 8,
+      "height": 5,
+      "width": 5,
+      "area": 12,
+      "score": 164.5263214111328,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-190",
+      "row": 84,
+      "column": 228,
+      "height": 44,
+      "width": 28,
+      "area": 450,
+      "score": 211.97085571289062,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-191",
+      "row": 84,
+      "column": 161,
+      "height": 6,
+      "width": 6,
+      "area": 21,
+      "score": 182.77420043945312,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-192",
+      "row": 83,
+      "column": 132,
+      "height": 7,
+      "width": 7,
+      "area": 32,
+      "score": 214.88372802734375,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-193",
+      "row": 83,
+      "column": 0,
+      "height": 7,
+      "width": 5,
+      "area": 21,
+      "score": 222.77420043945312,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-194",
+      "row": 82,
+      "column": 187,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 148.0,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-195",
+      "row": 82,
+      "column": 38,
+      "height": 3,
+      "width": 4,
+      "area": 6,
+      "score": 218.5,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-196",
+      "row": 81,
+      "column": 211,
+      "height": 11,
+      "width": 15,
+      "area": 82,
+      "score": 197.8495635986328,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-197",
+      "row": 80,
+      "column": 199,
+      "height": 7,
+      "width": 6,
+      "area": 24,
+      "score": 195.1764678955078,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-198",
+      "row": 79,
+      "column": 78,
+      "height": 8,
+      "width": 9,
+      "area": 33,
+      "score": 218.0425567626953,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-199",
+      "row": 77,
+      "column": 86,
+      "height": 32,
+      "width": 29,
+      "area": 440,
+      "score": 210.42697143554688,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-200",
+      "row": 77,
+      "column": 93,
+      "height": 7,
+      "width": 5,
+      "area": 21,
+      "score": 203.51612854003906,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-201",
+      "row": 76,
+      "column": 122,
+      "height": 7,
+      "width": 5,
+      "area": 16,
+      "score": 231.92591857910156,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-202",
+      "row": 73,
+      "column": 252,
+      "height": 8,
+      "width": 4,
+      "area": 19,
+      "score": 214.2413787841797,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-203",
+      "row": 73,
+      "column": 0,
+      "height": 7,
+      "width": 3,
+      "area": 12,
+      "score": 236.23809814453125,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-204",
+      "row": 69,
+      "column": 93,
+      "height": 4,
+      "width": 4,
+      "area": 9,
+      "score": 185.9375,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-205",
+      "row": 69,
+      "column": 23,
+      "height": 30,
+      "width": 17,
+      "area": 253,
+      "score": 215.82333374023438,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-206",
+      "row": 68,
+      "column": 110,
+      "height": 4,
+      "width": 5,
+      "area": 11,
+      "score": 220.42105102539062,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-207",
+      "row": 67,
+      "column": 241,
+      "height": 6,
+      "width": 6,
+      "area": 20,
+      "score": 159.03334045410156,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-208",
+      "row": 67,
+      "column": 219,
+      "height": 6,
+      "width": 8,
+      "area": 22,
+      "score": 170.21875,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-209",
+      "row": 67,
+      "column": 53,
+      "height": 5,
+      "width": 5,
+      "area": 15,
+      "score": 192.3478240966797,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-210",
+      "row": 66,
+      "column": 176,
+      "height": 5,
+      "width": 8,
+      "area": 25,
+      "score": 212.5,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-211",
+      "row": 66,
+      "column": 119,
+      "height": 7,
+      "width": 7,
+      "area": 31,
+      "score": 218.93023681640625,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-212",
+      "row": 66,
+      "column": 85,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 148.6666717529297,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-213",
+      "row": 66,
+      "column": 22,
+      "height": 4,
+      "width": 4,
+      "area": 8,
+      "score": 153.35714721679688,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-215",
+      "row": 65,
+      "column": 71,
+      "height": 11,
+      "width": 14,
+      "area": 72,
+      "score": 206.16842651367188,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-216",
+      "row": 64,
+      "column": 196,
+      "height": 4,
+      "width": 4,
+      "area": 8,
+      "score": 135.14285278320312,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-217",
+      "row": 64,
+      "column": 33,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 117.22222137451172,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-218",
+      "row": 63,
+      "column": 131,
+      "height": 8,
+      "width": 12,
+      "area": 27,
+      "score": 174.90908813476562,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-219",
+      "row": 61,
+      "column": 164,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 132.55555725097656,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-220",
+      "row": 59,
+      "column": 231,
+      "height": 5,
+      "width": 5,
+      "area": 14,
+      "score": 221.31817626953125,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-221",
+      "row": 58,
+      "column": 7,
+      "height": 11,
+      "width": 10,
+      "area": 70,
+      "score": 223.49411010742188,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-222",
+      "row": 57,
+      "column": 87,
+      "height": 8,
+      "width": 9,
+      "area": 35,
+      "score": 222.7291717529297,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-223",
+      "row": 56,
+      "column": 215,
+      "height": 7,
+      "width": 9,
+      "area": 34,
+      "score": 181.32608032226562,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-224",
+      "row": 56,
+      "column": 77,
+      "height": 5,
+      "width": 3,
+      "area": 8,
+      "score": 163.13333129882812,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-225",
+      "row": 56,
+      "column": 35,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 145.0,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-226",
+      "row": 53,
+      "column": 129,
+      "height": 10,
+      "width": 22,
+      "area": 99,
+      "score": 208.3082733154297,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-227",
+      "row": 53,
+      "column": 70,
+      "height": 10,
+      "width": 6,
+      "area": 32,
+      "score": 209.60000610351562,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-228",
+      "row": 49,
+      "column": 86,
+      "height": 5,
+      "width": 6,
+      "area": 18,
+      "score": 212.2142791748047,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-229",
+      "row": 47,
+      "column": 130,
+      "height": 4,
+      "width": 4,
+      "area": 8,
+      "score": 151.8000030517578,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-230",
+      "row": 46,
+      "column": 5,
+      "height": 11,
+      "width": 9,
+      "area": 64,
+      "score": 225.582275390625,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-231",
+      "row": 43,
+      "column": 252,
+      "height": 6,
+      "width": 4,
+      "area": 12,
+      "score": 162.85000610351562,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-232",
+      "row": 43,
+      "column": 127,
+      "height": 3,
+      "width": 4,
+      "area": 6,
+      "score": 162.9166717529297,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-233",
+      "row": 43,
+      "column": 46,
+      "height": 22,
+      "width": 15,
+      "area": 172,
+      "score": 231.7990264892578,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-234",
+      "row": 43,
+      "column": 0,
+      "height": 5,
+      "width": 2,
+      "area": 4,
+      "score": 205.0,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-235",
+      "row": 42,
+      "column": 188,
+      "height": 5,
+      "width": 5,
+      "area": 14,
+      "score": 165.0,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-236",
+      "row": 42,
+      "column": 132,
+      "height": 11,
+      "width": 18,
+      "area": 87,
+      "score": 210.76271057128906,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-237",
+      "row": 36,
+      "column": 252,
+      "height": 5,
+      "width": 4,
+      "area": 10,
+      "score": 185.58824157714844,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-238",
+      "row": 36,
+      "column": 46,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 128.0,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-239",
+      "row": 36,
+      "column": 35,
+      "height": 8,
+      "width": 7,
+      "area": 38,
+      "score": 211.3000030517578,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-240",
+      "row": 35,
+      "column": 238,
+      "height": 4,
+      "width": 5,
+      "area": 12,
+      "score": 192.89999389648438,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-241",
+      "row": 35,
+      "column": 138,
+      "height": 7,
+      "width": 16,
+      "area": 56,
+      "score": 201.58441162109375,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-242",
+      "row": 34,
+      "column": 203,
+      "height": 7,
+      "width": 7,
+      "area": 29,
+      "score": 231.875,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-243",
+      "row": 34,
+      "column": 14,
+      "height": 8,
+      "width": 7,
+      "area": 39,
+      "score": 243.23077392578125,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-244",
+      "row": 33,
+      "column": 222,
+      "height": 23,
+      "width": 19,
+      "area": 194,
+      "score": 226.14285278320312,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-245",
+      "row": 33,
+      "column": 126,
+      "height": 7,
+      "width": 8,
+      "area": 14,
+      "score": 151.9629669189453,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-246",
+      "row": 32,
+      "column": 49,
+      "height": 4,
+      "width": 4,
+      "area": 8,
+      "score": 128.60000610351562,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-247",
+      "row": 30,
+      "column": 194,
+      "height": 6,
+      "width": 7,
+      "area": 25,
+      "score": 178.88571166992188,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-248",
+      "row": 29,
+      "column": 96,
+      "height": 34,
+      "width": 27,
+      "area": 461,
+      "score": 231.06976318359375,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-249",
+      "row": 28,
+      "column": 213,
+      "height": 7,
+      "width": 7,
+      "area": 35,
+      "score": 237.10638427734375,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-250",
+      "row": 28,
+      "column": 60,
+      "height": 10,
+      "width": 10,
+      "area": 56,
+      "score": 216.5394744873047,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-251",
+      "row": 26,
+      "column": 234,
+      "height": 6,
+      "width": 5,
+      "area": 17,
+      "score": 230.1923065185547,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-252",
+      "row": 26,
+      "column": 0,
+      "height": 5,
+      "width": 4,
+      "area": 10,
+      "score": 178.3333282470703,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-253",
+      "row": 25,
+      "column": 32,
+      "height": 8,
+      "width": 7,
+      "area": 34,
+      "score": 199.8913116455078,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-254",
+      "row": 24,
+      "column": 248,
+      "height": 11,
+      "width": 8,
+      "area": 55,
+      "score": 208.64788818359375,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-255",
+      "row": 24,
+      "column": 200,
+      "height": 7,
+      "width": 7,
+      "area": 31,
+      "score": 229.8372039794922,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-256",
+      "row": 23,
+      "column": 187,
+      "height": 4,
+      "width": 4,
+      "area": 8,
+      "score": 163.92857360839844,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-257",
+      "row": 22,
+      "column": 6,
+      "height": 12,
+      "width": 25,
+      "area": 142,
+      "score": 219.7946014404297,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-258",
+      "row": 21,
+      "column": 137,
+      "height": 39,
+      "width": 32,
+      "area": 317,
+      "score": 214.4626007080078,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-259",
+      "row": 20,
+      "column": 242,
+      "height": 4,
+      "width": 5,
+      "area": 11,
+      "score": 156.88888549804688,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-260",
+      "row": 20,
+      "column": 221,
+      "height": 9,
+      "width": 10,
+      "area": 57,
+      "score": 221.90277099609375,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-261",
+      "row": 20,
+      "column": 193,
+      "height": 5,
+      "width": 7,
+      "area": 20,
+      "score": 184.43333435058594,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-262",
+      "row": 18,
+      "column": 4,
+      "height": 6,
+      "width": 6,
+      "area": 24,
+      "score": 218.08570861816406,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-263",
+      "row": 16,
+      "column": 144,
+      "height": 7,
+      "width": 8,
+      "area": 31,
+      "score": 223.1627960205078,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-264",
+      "row": 16,
+      "column": 51,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 139.44444274902344,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-265",
+      "row": 15,
+      "column": 231,
+      "height": 7,
+      "width": 7,
+      "area": 34,
+      "score": 226.3913116455078,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-266",
+      "row": 15,
+      "column": 199,
+      "height": 4,
+      "width": 4,
+      "area": 8,
+      "score": 184.46665954589844,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-267",
+      "row": 14,
+      "column": 245,
+      "height": 4,
+      "width": 5,
+      "area": 11,
+      "score": 214.36842346191406,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-268",
+      "row": 14,
+      "column": 171,
+      "height": 9,
+      "width": 9,
+      "area": 41,
+      "score": 222.16363525390625,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-269",
+      "row": 14,
+      "column": 39,
+      "height": 4,
+      "width": 5,
+      "area": 9,
+      "score": 153.5625,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-270",
+      "row": 13,
+      "column": 186,
+      "height": 4,
+      "width": 5,
+      "area": 11,
+      "score": 208.42105102539062,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-271",
+      "row": 12,
+      "column": 167,
+      "height": 3,
+      "width": 4,
+      "area": 6,
+      "score": 150.5833282470703,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-272",
+      "row": 11,
+      "column": 210,
+      "height": 14,
+      "width": 9,
+      "area": 73,
+      "score": 203.93478393554688,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-273",
+      "row": 10,
+      "column": 236,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 145.22222900390625,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-274",
+      "row": 9,
+      "column": 241,
+      "height": 6,
+      "width": 4,
+      "area": 14,
+      "score": 178.30435180664062,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-275",
+      "row": 9,
+      "column": 17,
+      "height": 12,
+      "width": 10,
+      "area": 75,
+      "score": 220.47872924804688,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-276",
+      "row": 6,
+      "column": 197,
+      "height": 4,
+      "width": 4,
+      "area": 9,
+      "score": 145.75,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-277",
+      "row": 6,
+      "column": 153,
+      "height": 6,
+      "width": 4,
+      "area": 14,
+      "score": 150.95652770996094,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-278",
+      "row": 5,
+      "column": 141,
+      "height": 9,
+      "width": 9,
+      "area": 40,
+      "score": 212.01852416992188,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-279",
+      "row": 4,
+      "column": 171,
+      "height": 9,
+      "width": 8,
+      "area": 45,
+      "score": 202.98304748535156,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-280",
+      "row": 4,
+      "column": 98,
+      "height": 24,
+      "width": 14,
+      "area": 192,
+      "score": 219.0755615234375,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-281",
+      "row": 4,
+      "column": 23,
+      "height": 5,
+      "width": 4,
+      "area": 11,
+      "score": 150.8947296142578,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-282",
+      "row": 2,
+      "column": 235,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 177.0,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-283",
+      "row": 2,
+      "column": 185,
+      "height": 7,
+      "width": 7,
+      "area": 16,
+      "score": 225.10000610351562,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-284",
+      "row": 1,
+      "column": 241,
+      "height": 7,
+      "width": 9,
+      "area": 18,
+      "score": 186.40625,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-285",
+      "row": 1,
+      "column": 164,
+      "height": 3,
+      "width": 3,
+      "area": 4,
+      "score": 158.77777099609375,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-287",
+      "row": 0,
+      "column": 169,
+      "height": 4,
+      "width": 4,
+      "area": 8,
+      "score": 218.86666870117188,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-289",
+      "row": 0,
+      "column": 120,
+      "height": 17,
+      "width": 17,
+      "area": 166,
+      "score": 213.70791625976562,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-290",
+      "row": 0,
+      "column": 55,
+      "height": 48,
+      "width": 43,
+      "area": 908,
+      "score": 222.48890686035156,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-291",
+      "row": 0,
+      "column": 68,
+      "height": 3,
+      "width": 6,
+      "area": 10,
+      "score": 213.77777099609375,
+      "sign": "dimmed",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    },
+    {
+      "candidate_id": "cv2-292",
+      "row": 0,
+      "column": 41,
+      "height": 11,
+      "width": 19,
+      "area": 117,
+      "score": 226.21678161621094,
+      "sign": "brightened",
+      "coordinate_space": "diff_image_pixel",
+      "classification": "unclassified_candidate"
+    }
+  ],
+  "artifacts": {
+    "annotated": "data/explorations/ra76p9600_dec30p4000_diff_annotated.png",
+    "montage": "data/explorations/ra76p9600_dec30p4000_montage.png"
+  },
+  "caveats": [
+    "OpenCV candidates are a visual aid on rendered PNGs, not the backend's noise-normalized significance detection.",
+    "Every candidate is unclassified and requires scientific validation.",
+    "Sign is relative to the rendered stretch, not calibrated photometry."
+  ]
+}
+[0m
+[0m$ [0mpython3 - <<'PY'
+import json, collections
+p='data/explorations/ra76p9600_dec30p4000.json'
+r=json.load(open(p))
+print({k:v for k,v in r.items() if k!='candidates' and k!='caveats'})
+c=r['candidates']
+print('candidate_count field:', r.get('candidate_count'), 'len:', len(c))
+print('sign counts:', collections.Counter(x['sign'] for x in c))
+print('area stats: min', min(x['area'] for x in c), 'max', max(x['area'] for x in c))
+print('largest 10:')
+for x in sorted(c, key=lambda d:d['area'], reverse=True)[:10]:
+    print(x['candidate_id'], 'row',x['row'],'col',x['column'],'h',x['height'],'w',x['width'],'area',x['area'],'score',round(x['score'],1),x['sign'])
+PY
+{'region': 'ra76p9600_dec30p4000', 'ra': 76.96, 'dec': 30.4, 'fov_arcmin': 10.0, 'status': 'ok', 'band': '3', 'context_epoch': '2026-02-20T17:20:32.679000Z', 'target_epoch': '2026-09-16T06:50:29.796000Z', 'context_observation_id': 'live_76p9600_30p4000_level2_2026W08_2A_0233_3D3_spx_l2bv272026227', 'target_observation_id': 'live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261', 'candidate_count': 289, 'artifacts': {'annotated': 'data/explorations/ra76p9600_dec30p4000_diff_annotated.png', 'montage': 'data/explorations/ra76p9600_dec30p4000_montage.png'}}
+candidate_count field: 289 len: 289
+sign counts: Counter({'dimmed': 149, 'brightened': 140})
+area stats: min 4 max 908
+largest 10:
+cv2-290 row 0 col 55 h 48 w 43 area 908 score 222.5 dimmed
+cv2-074 row 182 col 206 h 62 w 25 area 644 score 222.8 dimmed
+cv2-117 row 157 col 22 h 56 w 36 area 551 score 219.6 brightened
+cv2-157 row 114 col 124 h 46 w 30 area 534 score 214.6 dimmed
+cv2-248 row 29 col 96 h 34 w 27 area 461 score 231.1 brightened
+cv2-190 row 84 col 228 h 44 w 28 area 450 score 212.0 dimmed
+cv2-199 row 77 col 86 h 32 w 29 area 440 score 210.4 dimmed
+cv2-028 row 226 col 96 h 30 w 29 area 325 score 213.7 dimmed
+cv2-258 row 21 col 137 h 39 w 32 area 317 score 214.5 dimmed
+cv2-155 row 116 col 18 h 38 w 23 area 309 score 223.4 brightened
+[0m
+[0m→ [0mRead data/explorations/ra76p9600_dec30p4000_montage.png
+The OpenCV pass produced a very large, likely over-thresholded candidate list. Let me read the report header and view the montage, then cross-check against the scientific baseline.
+I can't visually inspect the montage (this model doesn't support image input), so I'll rely on the JSON report and the backend's scientific analysis. Let me run `/api/analyze_region` on the same epoch pair for the baseline comparison.
+[0m
+[0m$ [0mcurl -s -X POST "http://localhost:8000/api/analyze_region" -H "Content-Type: application/json" -d '{"context_epoch":"live_76p9600_30p4000_level2_2026W08_2A_0233_3D3_spx_l2bv272026227","target_epoch":"live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261","ra":76.96,"dec":30.4,"fov_arcmin":10,"size":256}' > /tmp/opencode/analyze_7696.json; python3 - <<'PY'
+import json
+r=json.load(open('/tmp/opencode/analyze_7696.json'))
+print(json.dumps(r, indent=2)[:6000])
+PY
+{
+  "status": "ok",
+  "context_epoch": "live_76p9600_30p4000_level2_2026W08_2A_0233_3D3_spx_l2bv272026227",
+  "target_epoch": "live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261",
+  "difference_score": 5.833538055419922,
+  "difference_image_url": "/api/diff/aligned?context_epoch=live_76p9600_30p4000_level2_2026W08_2A_0233_3D3_spx_l2bv272026227&target_epoch=live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261&ra=76.96&dec=30.4&fov=10.0&size=256",
+  "candidates": [
+    {
+      "candidate_id": "significance-003",
+      "source": "significance",
+      "classification": "unclassified_candidate",
+      "row": 14,
+      "column": 77,
+      "height": 11,
+      "width": 11,
+      "area": 71,
+      "score": 228.29251098632812,
+      "coordinate_space": "aligned_cutout_pixel",
+      "caveat": "Candidate requires scientific validation; it is not a confirmed detection."
+    },
+    {
+      "candidate_id": "significance-039",
+      "source": "significance",
+      "classification": "unclassified_candidate",
+      "row": 244,
+      "column": 29,
+      "height": 5,
+      "width": 7,
+      "area": 30,
+      "score": 224.82725524902344,
+      "coordinate_space": "aligned_cutout_pixel",
+      "caveat": "Candidate requires scientific validation; it is not a confirmed detection."
+    },
+    {
+      "candidate_id": "significance-014",
+      "source": "significance",
+      "classification": "unclassified_candidate",
+      "row": 85,
+      "column": 103,
+      "height": 7,
+      "width": 5,
+      "area": 30,
+      "score": 224.17449951171875,
+      "coordinate_space": "aligned_cutout_pixel",
+      "caveat": "Candidate requires scientific validation; it is not a confirmed detection."
+    },
+    {
+      "candidate_id": "significance-010",
+      "source": "significance",
+      "classification": "unclassified_candidate",
+      "row": 44,
+      "column": 111,
+      "height": 8,
+      "width": 7,
+      "area": 44,
+      "score": 216.81297302246094,
+      "coordinate_space": "aligned_cutout_pixel",
+      "caveat": "Candidate requires scientific validation; it is not a confirmed detection."
+    },
+    {
+      "candidate_id": "significance-008",
+      "source": "significance",
+      "classification": "unclassified_candidate",
+      "row": 34,
+      "column": 109,
+      "height": 7,
+      "width": 7,
+      "area": 39,
+      "score": 207.6147918701172,
+      "coordinate_space": "aligned_cutout_pixel",
+      "caveat": "Candidate requires scientific validation; it is not a confirmed detection."
+    },
+    {
+      "candidate_id": "significance-037",
+      "source": "significance",
+      "classification": "unclassified_candidate",
+      "row": 230,
+      "column": 215,
+      "height": 7,
+      "width": 7,
+      "area": 38,
+      "score": 188.247802734375,
+      "coordinate_space": "aligned_cutout_pixel",
+      "caveat": "Candidate requires scientific validation; it is not a confirmed detection."
+    },
+    {
+      "candidate_id": "significance-002",
+      "source": "significance",
+      "classification": "unclassified_candidate",
+      "row": 7,
+      "column": 127,
+      "height": 5,
+      "width": 5,
+      "area": 18,
+      "score": 156.3023681640625,
+      "coordinate_space": "aligned_cutout_pixel",
+      "caveat": "Candidate requires scientific validation; it is not a confirmed detection."
+    },
+    {
+      "candidate_id": "significance-005",
+      "source": "significance",
+      "classification": "unclassified_candidate",
+      "row": 26,
+      "column": 82,
+      "height": 11,
+      "width": 8,
+      "area": 45,
+      "score": 154.0159149169922,
+      "coordinate_space": "aligned_cutout_pixel",
+      "caveat": "Candidate requires scientific validation; it is not a confirmed detection."
+    },
+    {
+      "candidate_id": "significance-021",
+      "source": "significance",
+      "classification": "unclassified_candidate",
+      "row": 129,
+      "column": 134,
+      "height": 3,
+      "width": 4,
+      "area": 11,
+      "score": 145.53256225585938,
+      "coordinate_space": "aligned_cutout_pixel",
+      "caveat": "Candidate requires scientific validation; it is not a confirmed detection."
+    },
+    {
+      "candidate_id": "significance-009",
+      "source": "significance",
+      "classification": "unclassified_candidate",
+      "row": 44,
+      "column": 101,
+      "height": 4,
+      "width": 5,
+      "area": 15,
+      "score": 141.62229919433594,
+      "coordinate_space": "aligned_cutout_pixel",
+      "caveat": "Candidate requires scientific validation; it is not a confirmed detection."
+    },
+    {
+      "candidate_id": "significance-029",
+      "source": "significance",
+      "classification": "unclassified_candidate",
+      "row": 186,
+      "column": 38,
+      "height": 4,
+      "width": 5,
+      "area": 17,
+      "score": 138.16964721679688,
+      "coordinate_space": "aligned_cutout_pixel",
+      "caveat": "Candidate requires scientific validation; it is not a confirmed detection."
+    },
+    {
+      "candidate_id": "significance-020",
+      "source": "significance",
+      "classification": "unclassified_candidate",
+      "row": 129,
+      "column": 128,
+      "height": 4,
+      "width": 4,
+      "area": 11,
+      "score": 130.50924682617188,
+      "coordinate_space": "aligned_cutout_pixel",
+      "caveat": "Candidate requires scientific validation; it is not a confirmed detection."
+    },
+    {
+      "candidate_id": "significance-007",
+      "source": "significance",
+      "classification": "unclassified_candidate",
+      "row": 33,
+      "column": 99,
+      "height": 5,
+      "width": 6,
+      "area": 23,
+      "score": 129.3163604736328,
+      "coordinate_space": "aligned_cutout_pixel",
+      "caveat": "Candidate requires scientific validation; it is not a confirmed detection."
+    },
+    {
+      "candidate_id": "significance-031",
+      "source": "significance",
+      "classification": "unclassified_candidate",
+      "row": 197,
+      "column": 39,
+      "height": 4,
+      "width": 6,
+[0m
+[0m$ [0mpython3 - <<'PY'
+import json
+r=json.load(open('/tmp/opencode/analyze_7696.json'))
+c=r.get('candidates',[])
+print('scientific candidate count:', len(c), '| difference_score:', r.get('difference_score'))
+print('top 12 by score:')
+for x in sorted(c, key=lambda d:d['score'], reverse=True)[:12]:
+    print(f"{x['candidate_id']:>18}  row {x['row']:>3} col {x['column']:>3}  {x['height']}x{x['width']}  area {x['area']:>3}  score {x['score']:.1f}  src={x['source']}")
+PY
+scientific candidate count: 40 | difference_score: 5.833538055419922
+top 12 by score:
+  significance-003  row  14 col  77  11x11  area  71  score 228.3  src=significance
+  significance-039  row 244 col  29  5x7  area  30  score 224.8  src=significance
+  significance-014  row  85 col 103  7x5  area  30  score 224.2  src=significance
+  significance-010  row  44 col 111  8x7  area  44  score 216.8  src=significance
+  significance-008  row  34 col 109  7x7  area  39  score 207.6  src=significance
+  significance-037  row 230 col 215  7x7  area  38  score 188.2  src=significance
+  significance-002  row   7 col 127  5x5  area  18  score 156.3  src=significance
+  significance-005  row  26 col  82  11x8  area  45  score 154.0  src=significance
+  significance-021  row 129 col 134  3x4  area  11  score 145.5  src=significance
+  significance-009  row  44 col 101  4x5  area  15  score 141.6  src=significance
+  significance-029  row 186 col  38  4x5  area  17  score 138.2  src=significance
+  significance-020  row 129 col 128  4x4  area  11  score 130.5  src=significance
+[0m
+[0m$ [0mls -la data/explorations/ra76p9600_dec30p4000*
+-rw-rw-r-- 1 ileab ileab  85798 Nov 14 12:09 data/explorations/ra76p9600_dec30p4000.json
+-rw-rw-r-- 1 ileab ileab  16356 Nov 14 11:59 data/explorations/ra76p9600_dec30p4000_analyze_feb_mar.json
+-rw-rw-r-- 1 ileab ileab  16354 Nov 14 12:06 data/explorations/ra76p9600_dec30p4000_analyze_fov24.json
+-rw-rw-r-- 1 ileab ileab  12975 Nov 14 11:59 data/explorations/ra76p9600_dec30p4000_analyze_mar_sep.json
+-rw-rw-r-- 1 ileab ileab  13278 Nov 14 11:58 data/explorations/ra76p9600_dec30p4000_analyze_region.json
+-rw-rw-r-- 1 ileab ileab  28506 Nov 14 11:59 data/explorations/ra76p9600_dec30p4000_candidates_enriched.json
+-rw-rw-r-- 1 ileab ileab  69795 Nov 14 12:09 data/explorations/ra76p9600_dec30p4000_diff_annotated.png
+-rw-rw-r-- 1 ileab ileab 239124 Nov 14 12:09 data/explorations/ra76p9600_dec30p4000_montage.png
+-rw-rw-r-- 1 ileab ileab  84814 Nov 14 11:59 data/explorations/ra76p9600_dec30p4000_opencv_threshold120.json
+-rw-rw-r-- 1 ileab ileab  26127 Nov 14 12:01 data/explorations/ra76p9600_dec30p4000_significance.json
+[0m
+## Region report — RA 76.96°, Dec +30.40°
+
+**Backend:** healthy, `provider: cached`, 19 observations.
+**Region:** RA 76.96, Dec +30.40, FOV 10 arcmin, **band 3** (λ ≈ 2.213 µm).
+**Status:** `ok` — 3 epochs available; explorer used the two most time-separated (first + last).
+
+### Provenance / frames
+| Role | Observation ID | Epoch (UTC) | Band | Source |
+|---|---|---|---|---|
+| context | `live_76p9600_30p4000_level2_2026W08_2A_0233_3D3_spx_l2bv272026227` | 2026-02-20T17:20:32Z | 3 | live |
+| target | `live_76p9600_30p4000_level2_2026W38_1A_0435_2D3_spx_l2bv272026261` | 2026-09-16T06:50:29Z | 3 | live |
+
+The third epoch (`...2026W10_1A_0120_1D3...`, 2026-03-02T13:31Z, band 3, live) exists but was not used by the extreme-pair selection.
+
+### OpenCV candidates (display-grade visual aid)
+- **Candidate count: 289** (`candidate_count` in JSON) — 140 brightened, 149 dimmed.
+- The auto (Otsu) threshold was clearly permissive for this rendered difference: large connected structures dominate. Largest regions:
+
+| candidate_id | row, col | h×w | area (px) | score | sign |
+|---|---|---|---|---|---|
+| cv2-290 | 0, 55 | 48×43 | 908 | 222.5 | dimmed |
+| cv2-074 | 182, 206 | 62×25 | 644 | 222.8 | dimmed |
+| cv2-117 | 157, 22 | 56×36 | 551 | 219.6 | brightened |
+| cv2-157 | 114, 124 | 46×30 | 534 | 214.6 | dimmed |
+| cv2-248 | 29, 96 | 34×27 | 461 | 231.1 | brightened |
+| cv2-190 | 84, 228 | 44×28 | 450 | 212.0 | dimmed |
+| cv2-199 | 77, 86 | 32×29 | 440 | 210.4 | dimmed |
+| cv2-028 | 226, 96 | 30×29 | 325 | 213.7 | dimmed |
+
+The remaining 281 entries (area 4–317 px) are in the JSON report. Given the count, treat these as threshold artifacts/structure in the rendered stretch, not 289 independent astrophysical changes.
+
+### Scientific baseline — `/api/analyze_region` (same epoch pair)
+- **40 candidates**, `difference_score = 5.83` (noise-normalized, WCS-aligned). Retrieved as `source: significance`, coordinate space `aligned_cutout_pixel`.
+- Top by score:
+
+| candidate_id | row, col | h×w | area | score |
+|---|---|---|---|---|
+| significance-003 | 14, 77 | 11×11 | 71 | 228.3 |
+| significance-039 | 244, 29 | 5×7 | 30 | 224.8 |
+| significance-014 | 85, 103 | 7×5 | 30 | 224.2 |
+| significance-010 | 44, 111 | 8×7 | 44 | 216.8 |
+| significance-008 | 34, 109 | 7×7 | 39 | 207.6 |
+| significance-037 | 230, 215 | 7×7 | 38 | 188.2 |
+
+The 40-candidate scientific set is the authoritative baseline; the 289 OpenCV boxes should not be read as stronger evidence.
+
+### Artifacts
+- Annotated difference: `data/explorations/ra76p9600_dec30p4000_diff_annotated.png`
+- Montage: `data/explorations/ra76p9600_dec30p4000_montage.png`
+- JSON report: `data/explorations/ra76p9600_dec30p4000.json`
+- Scientific analysis (this run): `/tmp/opencode/analyze_7696.json`
+
+### Caveats
+- I could **not visually inspect the montage** — this model does not support image input. Findings above come from the JSON reports and backend responses only.
+- OpenCV candidate count is inflated by a permissive auto threshold on the rendered PNG; sign is relative to the display stretch, not calibrated photometry.
+- Pixel coordinates are `diff_image_pixel` (OpenCV) vs `aligned_cutout_pixel` (significance) — not directly interchangeable without the WCS/pixel mapping.
+- A stricter run (e.g. `--threshold 120`) would yield a cleaner display-grade list if desired.
+
+**Standing caveat:** All OpenCV (and significance) candidates are **unclassified_candidates** — visual aids requiring scientific validation, never confirmed detections.
