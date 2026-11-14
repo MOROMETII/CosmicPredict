@@ -751,6 +751,18 @@ def fetch_region(
     return result
 
 
+def _region_preview_url(ra: float, dec: float) -> str | None:
+    """A cutout preview URL for a sky position, from any cached observation covering it."""
+    for record in _catalog().values():
+        if not cutout_module.contains_position(record.provenance.get("header") or {}, ra, dec):
+            continue
+        return (
+            f"/api/cutout/{record.observation_id}?ra={ra}&dec={dec}"
+            f"&fov=24&size=256"
+        )
+    return None
+
+
 def _interaction_count() -> int:
     """Total social interactions, used to bust the feed cache when scoring changes."""
     from backend.storage import comments as comments_store
@@ -1005,6 +1017,7 @@ def survey() -> SurveyResponse:
             ra, dec = float(ra_text) % 360.0, float(dec_text)
         except ValueError:
             continue
+        preview_url = _region_preview_url(ra, dec)
         items.append(
             SurveyItem(
                 region_key=region_key,
@@ -1016,6 +1029,7 @@ def survey() -> SurveyResponse:
                 gifs=breakdown["gifs"],
                 people=breakdown["people"],
                 saves=breakdown["saves"],
+                preview_url=preview_url,
             )
         )
     items.sort(key=lambda item: item.score, reverse=True)

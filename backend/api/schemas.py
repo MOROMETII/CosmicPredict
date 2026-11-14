@@ -281,6 +281,7 @@ class SurveyItem(BaseModel):
     gifs: int
     people: int
     saves: int
+    preview_url: str | None = None
 
 
 class SurveyResponse(BaseModel):
