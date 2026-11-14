@@ -42,6 +42,46 @@ type EpochResponse = {
   message: string | null;
 };
 
+export type TimelineFrame = {
+  observation_id: string;
+  epoch: string | null;
+  band: string | null;
+  wavelength: number | null;
+  cutout_url: string;
+  source: string;
+  coverage: number | null;
+};
+
+export type SpectrumPoint = {
+  observation_id: string;
+  epoch: string | null;
+  band: string | null;
+  wavelength: number;
+  surface_brightness: number;
+  unit: string;
+};
+
+export type Spectrum = {
+  status: string;
+  ra: number;
+  dec: number;
+  points: SpectrumPoint[];
+  caveats: string[];
+  message: string | null;
+};
+
+export type Timeline = {
+  status: string;
+  ra: number;
+  dec: number;
+  fov_arcmin: number;
+  band: string | null;
+  available_bands: Record<string, number>;
+  frames: TimelineFrame[];
+  caveats: string[];
+  message: string | null;
+};
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
 export function resolveAssetUrl(assetUrl: string | null): string | null {
@@ -56,13 +96,25 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(body || `API request failed with ${response.status}`);
+    // FastAPI returns {"detail": "..."} — surface that human-readable reason.
+    let detail = body;
+    try {
+      detail = (JSON.parse(body) as { detail?: string }).detail ?? body;
+    } catch {
+      /* not JSON: keep raw body */
+    }
+    throw new Error(detail || `API request failed with ${response.status}`);
   }
   return response.json() as Promise<T>;
 }
 
 export async function getEpochs(ra: number, dec: number): Promise<EpochResponse> {
   return request<EpochResponse>(`/epochs?ra=${ra}&dec=${dec}`);
+}
+
+export async function getTimeline(ra: number, dec: number, fov = 15, band?: string | null): Promise<Timeline> {
+  const bandParam = band ? `&band=${encodeURIComponent(band)}` : "";
+  return request<Timeline>(`/timeline?ra=${ra}&dec=${dec}&fov=${fov}${bandParam}`);
 }
 
 export async function getImages(): Promise<Observation[]> {
@@ -85,29 +137,41 @@ export async function analyzePair(
   });
 }
 
-export type UploadOptions = {
-  observation_id?: string;
-  ra?: number;
-  dec?: number;
-  epoch?: string;
-  band?: string;
-  wavelength?: number;
-};
+export type Health = { status: string; provider: string; observation_count: number };
 
-export async function uploadImage(file: File, options: UploadOptions = {}): Promise<Observation> {
-  const form = new FormData();
-  form.append("file", file);
-  if (options.observation_id) form.append("observation_id", options.observation_id);
-  if (options.ra !== undefined) form.append("ra", String(options.ra));
-  if (options.dec !== undefined) form.append("dec", String(options.dec));
-  if (options.epoch) form.append("epoch", options.epoch);
-  if (options.band) form.append("band", options.band);
-  if (options.wavelength !== undefined) form.append("wavelength", String(options.wavelength));
+export async function getSpectrum(ra: number, dec: number): Promise<Spectrum> {
+  return request<Spectrum>(`/spectrum?ra=${ra}&dec=${dec}`);
+}
 
-  const response = await fetch(`${API_BASE}/upload`, { method: "POST", body: form });
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `Upload failed with ${response.status}`);
-  }
-  return response.json() as Promise<Observation>;
+export type FetchRegionResult = { status: string; region: string; frames: number };
+
+/** Ask the backend to pull small cutouts of this position from the live NASA archive. */
+export async function fetchRegion(ra: number, dec: number): Promise<FetchRegionResult> {
+  return request<FetchRegionResult>(`/fetch_region?ra=${ra}&dec=${dec}`, { method: "POST" });
+}
+
+export async function getHealth(): Promise<Health> {
+  return request<Health>("/health");
+}
+
+/** Change detection on the WCS-aligned cutout grid at (ra, dec) — matches the player frames. */
+export async function analyzeRegion(
+  contextEpoch: string,
+  targetEpoch: string,
+  ra: number,
+  dec: number,
+  fov = 15,
+  size = 256,
+): Promise<Analysis> {
+  return request<Analysis>("/analyze_region", {
+    method: "POST",
+    body: JSON.stringify({
+      context_epoch: contextEpoch,
+      target_epoch: targetEpoch,
+      ra,
+      dec,
+      fov_arcmin: fov,
+      size,
+    }),
+  });
 }

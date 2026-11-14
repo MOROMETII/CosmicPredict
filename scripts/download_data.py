@@ -5,7 +5,7 @@ instead of synthesizing training data.
 
 Example:
     python scripts/download_data.py --ra 83.8 --dec -5.4 --size 0.1 \
-        --service-url "https://irsa.ipac.caltech.edu/SIA?COLLECTION=spherex_qr2" \
+        --service-url "https://irsa.ipac.caltech.edu/SIA?COLLECTION=spherex_qr3" \
         --max-records 5 --output data/raw
 """
 

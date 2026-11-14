@@ -20,7 +20,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 import scraper  # noqa: E402
 
-SERVICE_URL = "https://irsa.ipac.caltech.edu/SIA?COLLECTION=spherex_qr2"
+SERVICE_URL = "https://irsa.ipac.caltech.edu/SIA?COLLECTION=spherex_qr3"
 
 # (name, ra_deg, dec_deg, max_records)
 TARGETS = [
@@ -28,7 +28,7 @@ TARGETS = [
     ("Epsilon Indi", 330.840, -56.786, 3),
     ("WISE 0855", 133.795, -7.245, 3),
     ("RW Aurigae", 76.957, 30.401, 3),
-    ("R Draconis", 262.316, 66.000, 3),
+    ("R Draconis", 248.168, 66.755, 3),
 ]
 
 

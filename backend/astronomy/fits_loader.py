@@ -6,8 +6,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import sys
+
 import numpy as np
 from astropy.io import fits
+from astropy.wcs import WCS
 
 # FLAGS bits that mark unusable pixels (detector defects and processing
 # artifacts). The SOURCE bit (21) and FULLSAMPLE bit (12) are intentionally
@@ -63,7 +66,20 @@ def _header_metadata(header: fits.Header) -> dict[str, Any]:
         "INSTRUME",
         "DETECTOR",
     )
-    return {key: header[key] for key in keys if key in header}
+    metadata = {key: header[key] for key in keys if key in header}
+    # Preserve the complete celestial WCS (reference pixel, rotation matrix,
+    # and distortion terms), without which pixel<->sky conversion — and thus
+    # any alignment or sky-centered cutout — is impossible. Serialized as a
+    # plain card dict so it survives JSON round-trips (Supabase jsonb).
+    try:
+        wcs = WCS(header)
+        if wcs.has_celestial:
+            metadata["WCS_CARDS"] = {
+                card.keyword: card.value for card in wcs.to_header(relax=True).cards
+            }
+    except Exception as error:  # noqa: BLE001 - a broken WCS must not block image loading
+        print(f"could not serialize WCS: {error}", file=sys.stderr)
+    return metadata
 
 
 def _wavelength_from_wave(hdul: fits.HDUList) -> float | None:
@@ -124,6 +140,9 @@ def load_fits_observation(
             if flags is not None:
                 valid_mask &= ~_flags_are_bad(flags)
             header = _header_metadata(science_hdu.header)
+            # Record the pixel dimensions so footprint checks work for
+            # partial-frame (cutout) files, not just full 2040x2040 detectors.
+            header["NAXIS2"], header["NAXIS1"] = int(image.shape[0]), int(image.shape[1])
             wavelength = _wavelength_from_wave(hdul)
             if wavelength is not None:
                 header["WAVELENGTH"] = wavelength

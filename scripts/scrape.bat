@@ -7,7 +7,7 @@ setlocal enabledelayedexpansion
 if not defined SCRAPE_DELAY set SCRAPE_DELAY=5
 if not defined SCRAPE_MAX_RECORDS set SCRAPE_MAX_RECORDS=5
 if not defined SCRAPE_SIZE set SCRAPE_SIZE=0.5
-if not defined SPHEREX_SIA_URL set SPHEREX_SIA_URL=https://irsa.ipac.caltech.edu/SIA?COLLECTION=spherex_qr2
+if not defined SPHEREX_SIA_URL set SPHEREX_SIA_URL=https://irsa.ipac.caltech.edu/SIA?COLLECTION=spherex_qr3
 
 echo Scraping with delay=%SCRAPE_DELAY%s, max_records=%SCRAPE_MAX_RECORDS%, size=%SCRAPE_SIZE%deg
 

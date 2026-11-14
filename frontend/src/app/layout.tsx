@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import InitColorSchemeScript from "@mui/material/InitColorSchemeScript";
 import "./globals.css";
 import ThemeRegistry from "@/components/ThemeRegistry";
 
@@ -20,8 +21,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body><ThemeRegistry>{children}</ThemeRegistry></body>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
+      <body>
+        <InitColorSchemeScript attribute="class" defaultMode="light" />
+        <ThemeRegistry>{children}</ThemeRegistry>
+      </body>
     </html>
   );
 }
