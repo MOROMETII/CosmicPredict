@@ -302,13 +302,13 @@ export default function Home() {
                   Sky Scroll
                 </Button>
               </Tooltip>
-              <Tooltip title="Sky map — every observation pinned on the sky">
+              <Tooltip title="Discover — explore real observations pinned across the sky">
                 <Button
                   component={NextLink}
-                  href="/skymap"
+                  href="/discover"
                   sx={{ color: "text.primary", display: { xs: "none", md: "inline-flex" } }}
                 >
-                  Sky map
+                  Discover
                 </Button>
               </Tooltip>
               <Tooltip title="Research view — motion and variability analysis">
