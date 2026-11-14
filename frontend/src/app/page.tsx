@@ -300,6 +300,15 @@ export default function Home() {
                   Leaderboard
                 </Button>
               </Tooltip>
+              <Tooltip title="Sky map — every observation pinned on the sky">
+                <Button
+                  component={NextLink}
+                  href="/skymap"
+                  sx={{ color: "text.primary", display: { xs: "none", md: "inline-flex" } }}
+                >
+                  Sky map
+                </Button>
+              </Tooltip>
               <Tooltip title="Sky Scroll — swipe through real sky timelapses and flag anything suspicious">
                 <IconButton
                   component={NextLink}
@@ -347,7 +356,7 @@ export default function Home() {
       >
         <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
           <Grid container spacing={4} alignItems="center">
-            <Grid size={{ xs: 12, md: 7 }}>
+            <Grid size={{ xs: 12 }}>
               <Typography
                 variant="overline"
                 sx={{ color: nasa.red, letterSpacing: "0.12em", fontWeight: 700, lineHeight: 1, display: "block", mb: 1 }}
@@ -357,44 +366,11 @@ export default function Home() {
               <Typography variant="h3" sx={{ fontSize: { xs: 28, md: 38 }, mb: 1.5 }}>
                 The sky is not still.
               </Typography>
-              <Typography variant="body1" sx={{ color: "text.secondary", mb: 1.5 }}>
-                Since 2025, NASA&apos;s SPHEREx space telescope has photographed the <em>entire sky</em> every
-                six months in 102 shades of infrared light. Nearby stars drift, asteroids race by, and
-                stars pulse in brightness — but these changes only reveal themselves when you compare
-                pictures taken months apart. Pluto was discovered in exactly this way, by flipping
-                between two photographs until one dot jumped.
+              <Typography variant="body1" sx={{ color: "text.secondary", maxWidth: 720 }}>
+                Compare real SPHEREx observations of any spot on the sky across dates, blink between
+                them, and run a change detector to flag things that moved or changed in brightness —
+                whatever it flags is a candidate for review, not a confirmed discovery.
               </Typography>
-              <Typography variant="body1" sx={{ color: "text.secondary" }}>
-                This tool lets anyone replay real SPHEREx observations of any spot on the sky in date
-                order, flip between dates, and run a statistical change detector. Whatever it
-                flags is a <strong>candidate</strong> for human review — not a confirmed discovery.
-              </Typography>
-            </Grid>
-            <Grid size={{ xs: 12, md: 5 }}>
-              <Stack spacing={1.5}>
-                {[
-                  ["102", "infrared wavelength bands, 0.75–5 µm"],
-                  ["6 months", "to map the complete sky, every time"],
-                  ["1 billion+", "objects imaged — far too many for experts alone"],
-                ].map(([stat, caption]) => (
-                  <Paper key={stat} sx={{ p: 2, display: "flex", alignItems: "baseline", gap: 1.5 }}>
-                    <Typography
-                      sx={{
-                        fontFamily: "var(--font-nasa-mono), 'DM Mono', monospace",
-                        fontWeight: 300,
-                        fontSize: 26,
-                        color: "primary.main",
-                        minWidth: 118,
-                      }}
-                    >
-                      {stat}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {caption}
-                    </Typography>
-                  </Paper>
-                ))}
-              </Stack>
             </Grid>
           </Grid>
         </Container>

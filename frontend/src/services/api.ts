@@ -206,11 +206,7 @@ export type FeedItem = {
   n_frames: number;
   region_key: string;
   score: number;
-  flags: number;
-  comments: number;
-  gifs: number;
-  people: number;
-  saves: number;
+  likes: number;
 };
 
 export type Feed = {
@@ -265,16 +261,16 @@ export async function createMark(payload: MarkCreate): Promise<Mark> {
   return request<Mark>("/marks", { method: "POST", body: JSON.stringify(payload) });
 }
 
-/** Double-tap save (like) a sky region. */
-export async function saveRegion(regionKey: string): Promise<{ id: string; region_key: string; created_at: string }> {
-  return request<{ id: string; region_key: string; created_at: string }>("/saves", {
+/** Like a sky region. */
+export async function likeRegion(regionKey: string): Promise<{ id: string; region_key: string; created_at: string }> {
+  return request<{ id: string; region_key: string; created_at: string }>("/likes", {
     method: "POST",
     body: JSON.stringify({ region_key: regionKey }),
   });
 }
 
-export async function getSaveCount(regionKey: string): Promise<{ status: string; region_key: string; count: number }> {
-  return request<{ status: string; region_key: string; count: number }>(`/saves?region_key=${encodeURIComponent(regionKey)}`);
+export async function getLikeCount(regionKey: string): Promise<{ status: string; region_key: string; count: number }> {
+  return request<{ status: string; region_key: string; count: number }>(`/likes?region_key=${encodeURIComponent(regionKey)}`);
 }
 
 export type SurveyItem = {
@@ -282,11 +278,7 @@ export type SurveyItem = {
   ra: number;
   dec: number;
   score: number;
-  flags: number;
-  comments: number;
-  gifs: number;
-  people: number;
-  saves: number;
+  likes: number;
   preview_url: string | null;
 };
 
@@ -301,66 +293,30 @@ export async function getSurvey(): Promise<Survey> {
   return request<Survey>("/survey");
 }
 
-export async function deleteMark(id: string): Promise<void> {
-  await request<{ status: string }>(`/marks/${encodeURIComponent(id)}`, { method: "DELETE" });
-}
-
-export type Comment = {
-  id: string;
-  region_key: string;
-  author: string;
-  body: string;
-  gif_url: string | null;
-  gif_still_url: string | null;
-  gif_title: string | null;
-  created_at: string;
+export type SkyMapItem = {
+  observation_id: string;
+  ra: number;
+  dec: number;
+  epoch: string | null;
+  band: string | null;
+  wavelength: number | null;
+  source: string;
+  preview_url: string | null;
 };
 
-export type Comments = {
+export type SkyMap = {
   status: string;
-  region_key: string;
-  comments: Comment[];
+  observations: SkyMapItem[];
   caveats: string[];
 };
 
-export type CommentDraft = {
-  body?: string;
-  gif_url?: string | null;
-  gif_still_url?: string | null;
-  gif_title?: string | null;
-};
-
-/** Comments on one sky region (the Sky Scroll reel). */
-export async function getComments(regionKey: string): Promise<Comments> {
-  return request<Comments>(`/comments?region_key=${encodeURIComponent(regionKey)}`);
+/** Coordinates + previews for every homepage observation, for the sky map. */
+export async function getSkyMap(): Promise<SkyMap> {
+  return request<SkyMap>("/skymap");
 }
 
-/** Post a comment on a sky region. */
-export async function createComment(
-  regionKey: string,
-  body: string,
-  author?: string,
-  gif?: CommentDraft,
-): Promise<Comment> {
-  return request<Comment>("/comments", {
-    method: "POST",
-    body: JSON.stringify({ region_key: regionKey, body, author, ...gif }),
-  });
-}
-
-export type Gif = {
-  id: string;
-  title: string;
-  preview_url: string;
-  gif_url: string;
-};
-
-/** Search GIFs via the backend (Giphy proxy with a curated fallback). */
-export async function searchGifs(query: string): Promise<Gif[]> {
-  const result = await request<{ status: string; query: string; gifs: Gif[] }>(
-    `/gifs?query=${encodeURIComponent(query)}`,
-  );
-  return result.gifs;
+export async function deleteMark(id: string): Promise<void> {
+  await request<{ status: string }>(`/marks/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 /** Known Gaia DR3 catalog stars inside the current cutout frame (ESA archive, cached). */
