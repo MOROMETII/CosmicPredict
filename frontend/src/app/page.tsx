@@ -78,10 +78,15 @@ const toObservation = (frame: TimelineFrame): Observation => ({
 /** The app's own mark — an orbit sweep. (Not an agency logo.) */
 function AppMark() {
   return (
-    <Box component="svg" viewBox="0 0 40 40" sx={{ width: 34, height: 34, flexShrink: 0 }} aria-hidden>
-      <circle cx="20" cy="20" r="18" fill="none" stroke={nasa.blue} strokeWidth="2.4" />
+    <Box
+      component="svg"
+      viewBox="0 0 40 40"
+      sx={{ width: 34, height: 34, flexShrink: 0, "& .mark-blue": { stroke: "primary.main", fill: "primary.main" } }}
+      aria-hidden
+    >
+      <circle className="mark-blue" cx="20" cy="20" r="18" fill="none" strokeWidth="2.4" />
       <ellipse cx="20" cy="20" rx="17" ry="6.5" fill="none" stroke={nasa.red} strokeWidth="2.4" transform="rotate(-18 20 20)" />
-      <circle cx="20" cy="20" r="4.5" fill={nasa.blue} />
+      <circle className="mark-blue" cx="20" cy="20" r="4.5" />
       <circle cx="33.5" cy="13.5" r="2.6" fill={nasa.red} />
     </Box>
   );
@@ -257,7 +262,8 @@ export default function Home() {
           color: "text.primary",
           py: 1.5,
           borderTop: `3px solid ${nasa.red}`,
-          borderBottom: `1px solid ${nasa.carbon10}`,
+          borderBottom: "1px solid",
+          borderColor: "divider",
         })}
       >
         <Container maxWidth="lg">
@@ -304,14 +310,14 @@ export default function Home() {
                 </Button>
               </Tooltip>
               <Tooltip title="My flags — everything you marked for review">
-                <IconButton component={NextLink} href="/flags" sx={{ color: nasa.blueBright }} aria-label="My flags">
+                <IconButton component={NextLink} href="/flags" sx={{ color: "primary.main" }} aria-label="My flags">
                   <Bookmarks />
                 </IconButton>
               </Tooltip>
               <Chip
                 label={provider ? `Data: ${provider === "supabase" ? "team archive" : "local cache"}` : "Backend offline"}
                 size="small"
-                sx={{ bgcolor: provider ? nasa.carbon0 : nasa.red, color: provider ? "text.primary" : "#fff", display: { xs: "none", sm: "inline-flex" } }}
+                sx={{ bgcolor: provider ? "action.selected" : nasa.red, color: provider ? "text.primary" : "#fff", display: { xs: "none", sm: "inline-flex" } }}
               />
               <ModeToggle />
             </Stack>
@@ -366,7 +372,7 @@ export default function Home() {
                         fontFamily: "var(--font-nasa-mono), 'DM Mono', monospace",
                         fontWeight: 300,
                         fontSize: 26,
-                        color: nasa.blue,
+                        color: "primary.main",
                         minWidth: 118,
                       }}
                     >
