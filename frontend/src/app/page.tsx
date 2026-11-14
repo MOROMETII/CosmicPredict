@@ -24,11 +24,8 @@ import {
 } from "@mui/material";
 import { useColorScheme } from "@mui/material/styles";
 import {
-<<<<<<< Updated upstream
-  Bookmarks,
-=======
   AutoAwesome,
->>>>>>> Stashed changes
+  Bookmarks,
   DarkMode,
   ExpandLess,
   ExpandMore,
