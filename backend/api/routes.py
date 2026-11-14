@@ -18,6 +18,9 @@ from backend.api.schemas import (
     AnalyzeRegionRequest,
     AnalyzeRequest,
     AnalyzeResponse,
+    CommentCreateRequest,
+    CommentResponse,
+    CommentsResponse,
     EpochsResponse,
     FeedItem,
     FeedResponse,
@@ -904,6 +907,28 @@ def delete_mark(mark_id: str) -> dict[str, str]:
     if not marks_store.delete_mark(mark_id):
         raise HTTPException(status_code=404, detail=f"unknown mark: {mark_id}")
     return {"status": "deleted", "id": mark_id}
+
+
+@router.get("/comments", response_model=CommentsResponse)
+def list_comments(region_key: str = Query(..., max_length=64)) -> CommentsResponse:
+    """Comments on one sky region (the Sky Scroll reel)."""
+    from backend.storage import comments as comments_store
+
+    return CommentsResponse(
+        status="ok",
+        region_key=region_key,
+        comments=[CommentResponse(**comment) for comment in comments_store.list_comments(region_key)],
+        caveats=["Comments are social annotations, not scientific findings or detections."],
+    )
+
+
+@router.post("/comments", response_model=CommentResponse)
+def create_comment(request: CommentCreateRequest) -> CommentResponse:
+    """Post a comment on a sky region."""
+    from backend.storage import comments as comments_store
+
+    comment = comments_store.add_comment(request.region_key, request.author, request.body)
+    return CommentResponse(**comment)
 
 
 @router.get("/gaia", response_model=GaiaOverlayResponse)

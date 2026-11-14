@@ -46,6 +46,7 @@ import {
 } from "@/services/api";
 import { nasa } from "@/theme";
 import ScrollTutorial, { tutorialSeen } from "@/components/ScrollTutorial";
+import CommentSection from "@/components/CommentSection";
 
 const DOUBLE_TAP_MS = 300;
 const HOLD_MS = 280;
@@ -344,7 +345,19 @@ function ReelCard({
         position: "relative",
       }}
     >
-      <Box sx={{ position: "relative", width: "min(100vw, 76dvh)" }}>
+      <Box
+        sx={{
+          position: "relative",
+          width: "100%",
+          maxWidth: 1100,
+          display: "flex",
+          flexDirection: { xs: "column", md: "row" },
+          gap: 2,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Box sx={{ display: "flex", flexDirection: "column", width: { xs: "100%", md: "auto" } }}>
         <Box
           onPointerDown={onPointerDown}
           onPointerUp={onPointerUp}
@@ -352,6 +365,7 @@ function ReelCard({
           sx={{
             position: "relative",
             aspectRatio: "1",
+            width: { xs: "100%", md: "min(76dvh, calc(100vw - 380px))" },
             bgcolor: "#0a0c10",
             borderRadius: { xs: 0, sm: 3 },
             overflow: "hidden",
@@ -611,6 +625,28 @@ function ReelCard({
             />
           </Stack>
         )}
+        </Box>
+
+        {/* Comment panel — always open, beside the sky image */}
+        <Box
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          sx={{
+            width: { xs: "100%", md: 360 },
+            height: { xs: "auto", md: "min(76dvh, calc(100vw - 380px))" },
+            maxHeight: { xs: 340, md: "none" },
+            borderRadius: 2,
+            border: "1px solid rgba(255,255,255,.16)",
+            bgcolor: "rgba(10,13,18,.96)",
+            p: 1.5,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            flexShrink: 0,
+          }}
+        >
+          <CommentSection regionKey={item.region_key} ra={item.ra} dec={item.dec} />
+        </Box>
       </Box>
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="xs">

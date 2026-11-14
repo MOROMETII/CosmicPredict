@@ -200,6 +200,29 @@ class MarksResponse(BaseModel):
     caveats: list[str] = Field(default_factory=list)
 
 
+class CommentCreateRequest(BaseModel):
+    """Post a comment on a sky region (the Sky Scroll reels)."""
+
+    region_key: str = Field(..., max_length=64)
+    author: str | None = Field(default=None, max_length=64)
+    body: str = Field(..., min_length=1, max_length=2000)
+
+
+class CommentResponse(BaseModel):
+    id: str
+    region_key: str
+    author: str
+    body: str
+    created_at: str
+
+
+class CommentsResponse(BaseModel):
+    status: str
+    region_key: str
+    comments: list[CommentResponse] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
+
+
 class AnalyzeResponse(BaseModel):
     status: str
     context_epoch: str
