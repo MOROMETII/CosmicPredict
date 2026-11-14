@@ -11,15 +11,18 @@ fetched regions in a small ledger so repeat requests are instant.
 
 Politeness: bounded frame counts, a delay between downloads, and a ledger to
 avoid re-querying. The cached/offline demo path never depends on this module.
+
+The SIA-discovery + IBE-cutout access pattern follows the official SPHEREx
+tutorial notebooks (https://caltech-ipac.github.io/irsa-tutorials/).
 """
 
 from __future__ import annotations
 
 import json
 import re
+import threading
 import time
 import urllib.parse
-import urllib.request
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -29,10 +32,10 @@ import numpy as np
 from astropy.io.votable import parse
 
 from backend import config
+from backend.http_util import http_get
 
 SIA_COLLECTIONS = ("spherex_dr1", "spherex_qr3")
 SIA_BASE = "https://irsa.ipac.caltech.edu/SIA?COLLECTION={collection}"
-_USER_AGENT = "cosmic-predict-live/0.1"
 _LEDGER_NAME = "live_regions.json"
 
 # Transient HTTP statuses worth retrying with exponential backoff. IRSA's IBE
@@ -52,12 +55,24 @@ class LiveArchiveError(RuntimeError):
     """Raised when the live IRSA query or download fails."""
 
 
+# Retry transient IRSA failures (503s, timeouts) via the shared helper.
+_http_get = http_get
+
+
 def _snap(value: float) -> float:
     return round(round(value / _GRID_DEG) * _GRID_DEG, 4)
 
 
+_ledger_lock = threading.Lock()
+
+
 def _ledger_path() -> Path:
     return config.RAW_DIR / _LEDGER_NAME
+
+
+def list_regions() -> dict[str, Any]:
+    """The regions fetched on demand so far, keyed by "ra,dec" (snapped)."""
+    return dict(_read_ledger().get("regions") or {})
 
 
 def _read_ledger() -> dict[str, Any]:
@@ -117,7 +132,6 @@ def _query_sia(ra: float, dec: float, radius_deg: float, timeout: float) -> list
             {"POS": f"CIRCLE {ra} {dec} {radius_deg}", "MAXREC": "2000"}
         )
         url = f"{SIA_BASE.format(collection=collection)}&{params}"
-        request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
         try:
             with _open_with_retry(request, timeout=timeout) as response:
                 payload = response.read()
@@ -229,7 +243,6 @@ def fetch_region(
             downloaded.append(filename)
             continue
         cutout_url = f"{frame['url']}?center={ra_snap},{dec_snap}&size={size_arcmin}arcmin"
-        request = urllib.request.Request(cutout_url, headers={"User-Agent": _USER_AGENT})
         try:
             with _open_with_retry(request, timeout=timeout) as response:
                 payload = response.read()
@@ -252,6 +265,81 @@ def fetch_region(
         "files": downloaded,
         "size_arcmin": size_arcmin,
     }
-    ledger["regions"][region_key] = summary
-    _write_ledger(ledger)
+    with _ledger_lock:
+        ledger = _read_ledger()
+        ledger["regions"][region_key] = summary
+        _write_ledger(ledger)
     return {"status": "fetched", "region": region_key, **summary}
+
+
+# ---------------------------------------------------------------------------
+# Non-blocking fetch jobs
+#
+# A full region fetch (SIA query + up to 8 cutout downloads) can take minutes,
+# far longer than HTTP proxies keep a request open (the Next.js dev proxy cuts
+# the socket after ~30 s, which surfaced as ECONNRESET / "Internal Server
+# Error" in the frontend). The API therefore starts the fetch on a worker
+# thread and answers immediately; clients poll the same endpoint until the
+# status becomes "already_fetched" or "failed".
+# ---------------------------------------------------------------------------
+
+_jobs_lock = threading.Lock()
+_jobs: dict[str, dict[str, Any]] = {}
+
+
+def _run_fetch(ra_snap: float, dec_snap: float, region_key: str) -> None:
+    try:
+        fetch_region(ra_snap, dec_snap)
+    except Exception as error:  # noqa: BLE001 - job outcome is reported via polling
+        with _jobs_lock:
+            _jobs[region_key] = {"status": "failed", "error": str(error)}
+    else:
+        with _jobs_lock:
+            _jobs.pop(region_key, None)
+
+
+def start_fetch(ra: float, dec: float) -> dict[str, Any]:
+    """Start (or report on) a background fetch of this region.
+
+    Returns one of:
+    - ``{"status": "already_fetched", ...summary}`` — cutouts are in the cache.
+    - ``{"status": "fetching", ...}`` — a download job is running; poll again.
+    - ``{"status": "failed", "message": ...}`` — the last job failed; the next
+      call starts a fresh attempt.
+    """
+    ra_snap, dec_snap = _snap(ra % 360.0), _snap(dec)
+    region_key = f"{ra_snap},{dec_snap}"
+    known = _read_ledger()["regions"].get(region_key)
+    if known:
+        with _jobs_lock:
+            _jobs.pop(region_key, None)
+        return {"status": "already_fetched", "region": region_key, **known}
+    with _jobs_lock:
+        job = _jobs.get(region_key)
+        if job is not None:
+            if job["status"] == "fetching":
+                return {
+                    "status": "fetching",
+                    "region": region_key,
+                    "message": "Querying IRSA and downloading cutouts; poll this endpoint for progress.",
+                }
+            # A finished-but-failed job: report it once, then forget it so the
+            # caller's next request retries from scratch.
+            _jobs.pop(region_key, None)
+            return {
+                "status": "failed",
+                "region": region_key,
+                "message": job.get("error") or "The live archive fetch failed. Try again shortly.",
+            }
+        _jobs[region_key] = {"status": "fetching"}
+    threading.Thread(
+        target=_run_fetch,
+        args=(ra_snap, dec_snap, region_key),
+        name=f"live-fetch-{region_key}",
+        daemon=True,
+    ).start()
+    return {
+        "status": "fetching",
+        "region": region_key,
+        "message": "Fetch started; poll this endpoint until the status is already_fetched.",
+    }
