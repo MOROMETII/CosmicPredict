@@ -205,7 +205,10 @@ class CommentCreateRequest(BaseModel):
 
     region_key: str = Field(..., max_length=64)
     author: str | None = Field(default=None, max_length=64)
-    body: str = Field(..., min_length=1, max_length=2000)
+    body: str = Field(default="", max_length=2000)
+    gif_url: str | None = Field(default=None, max_length=2048)
+    gif_still_url: str | None = Field(default=None, max_length=2048)
+    gif_title: str | None = Field(default=None, max_length=256)
 
 
 class CommentResponse(BaseModel):
@@ -213,6 +216,9 @@ class CommentResponse(BaseModel):
     region_key: str
     author: str
     body: str
+    gif_url: str | None = None
+    gif_still_url: str | None = None
+    gif_title: str | None = None
     created_at: str
 
 
@@ -221,6 +227,19 @@ class CommentsResponse(BaseModel):
     region_key: str
     comments: list[CommentResponse] = Field(default_factory=list)
     caveats: list[str] = Field(default_factory=list)
+
+
+class GifResponse(BaseModel):
+    id: str
+    title: str
+    preview_url: str
+    gif_url: str
+
+
+class GifsResponse(BaseModel):
+    status: str
+    query: str
+    gifs: list[GifResponse] = Field(default_factory=list)
 
 
 class AnalyzeResponse(BaseModel):

@@ -267,6 +267,9 @@ export type Comment = {
   region_key: string;
   author: string;
   body: string;
+  gif_url: string | null;
+  gif_still_url: string | null;
+  gif_title: string | null;
   created_at: string;
 };
 
@@ -277,17 +280,44 @@ export type Comments = {
   caveats: string[];
 };
 
+export type CommentDraft = {
+  body?: string;
+  gif_url?: string | null;
+  gif_still_url?: string | null;
+  gif_title?: string | null;
+};
+
 /** Comments on one sky region (the Sky Scroll reel). */
 export async function getComments(regionKey: string): Promise<Comments> {
   return request<Comments>(`/comments?region_key=${encodeURIComponent(regionKey)}`);
 }
 
 /** Post a comment on a sky region. */
-export async function createComment(regionKey: string, body: string, author?: string): Promise<Comment> {
+export async function createComment(
+  regionKey: string,
+  body: string,
+  author?: string,
+  gif?: CommentDraft,
+): Promise<Comment> {
   return request<Comment>("/comments", {
     method: "POST",
-    body: JSON.stringify({ region_key: regionKey, body, author }),
+    body: JSON.stringify({ region_key: regionKey, body, author, ...gif }),
   });
+}
+
+export type Gif = {
+  id: string;
+  title: string;
+  preview_url: string;
+  gif_url: string;
+};
+
+/** Search GIFs via the backend (Giphy proxy with a curated fallback). */
+export async function searchGifs(query: string): Promise<Gif[]> {
+  const result = await request<{ status: string; query: string; gifs: Gif[] }>(
+    `/gifs?query=${encodeURIComponent(query)}`,
+  );
+  return result.gifs;
 }
 
 /** Known Gaia DR3 catalog stars inside the current cutout frame (ESA archive, cached). */

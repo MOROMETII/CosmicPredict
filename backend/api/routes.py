@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import time
+import urllib.parse
+import urllib.request
 from io import BytesIO
 from datetime import datetime
 from typing import Any
@@ -27,6 +30,8 @@ from backend.api.schemas import (
     GaiaMatchResponse,
     GaiaOverlayResponse,
     GaiaSourceResponse,
+    GifResponse,
+    GifsResponse,
     MarkCreateRequest,
     MarkResponse,
     MarksResponse,
@@ -927,8 +932,68 @@ def create_comment(request: CommentCreateRequest) -> CommentResponse:
     """Post a comment on a sky region."""
     from backend.storage import comments as comments_store
 
-    comment = comments_store.add_comment(request.region_key, request.author, request.body)
+    comment = comments_store.add_comment(
+        request.region_key,
+        request.author,
+        request.body,
+        gif_url=request.gif_url,
+        gif_still_url=request.gif_still_url,
+        gif_title=request.gif_title,
+    )
     return CommentResponse(**comment)
+
+
+# Curated fallback GIFs (Giphy media CDN URLs) used when no Giphy API key is
+# configured, so the picker works offline for the demo.
+_CURATED_GIFS = [
+    {"id": "3o7abKhOpu0NwenH3O", "title": "Space", "url": "https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif"},
+    {"id": "26tPplGWjN0xLybiU", "title": "Rocket", "url": "https://media.giphy.com/media/26tPplGWjN0xLybiU/giphy.gif"},
+    {"id": "l0MYt5jPR6QX5pnqM", "title": "Galaxy", "url": "https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif"},
+    {"id": "26u4cqiYI30juCOGY", "title": "Earth", "url": "https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif"},
+    {"id": "xT9DPPqwOCoxi3ASWc", "title": "Stars", "url": "https://media.giphy.com/media/xT9DPPqwOCoxi3ASWc/giphy.gif"},
+    {"id": "3o7TKMt1VVNkHV2PaE", "title": "Astronaut", "url": "https://media.giphy.com/media/3o7TKMt1VVNkHV2PaE/giphy.gif"},
+    {"id": "l41lV3VY7ZzcJzBhO", "title": "Nebula", "url": "https://media.giphy.com/media/l41lV3VY7ZzcJzBhO/giphy.gif"},
+    {"id": "xT9IgG50Fb7Mi0prBC", "title": "Light", "url": "https://media.giphy.com/media/xT9IgG50Fb7Mi0prBC/giphy.gif"},
+]
+
+
+@router.get("/gifs", response_model=GifsResponse)
+def search_gifs(query: str = Query(default="", max_length=100)) -> GifsResponse:
+    """Search GIFs via Giphy, with a curated fallback when no key is configured."""
+    import urllib.request
+
+    if config.GIPHY_API_KEY:
+        params = urllib.parse.urlencode(
+            {"api_key": config.GIPHY_API_KEY, "q": query or "space", "limit": 24, "rating": "pg"}
+        )
+        try:
+            request = urllib.request.Request(f"https://api.giphy.com/v1/gifs/search?{params}", headers={"User-Agent": "cosmic-predict/0.1"})
+            with urllib.request.urlopen(request, timeout=10) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            gifs = [
+                GifResponse(
+                    id=str(item["id"]),
+                    title=item.get("title") or "GIF",
+                    preview_url=item["images"]["fixed_height"]["url"],
+                    gif_url=item["images"]["original"]["url"],
+                )
+                for item in payload.get("data", [])
+            ]
+            if gifs:
+                return GifsResponse(status="ok", query=query, gifs=gifs)
+        except Exception as error:  # noqa: BLE001 - fall through to curated set on failure
+            print(f"Giphy search failed: {error}")
+
+    # Curated fallback, filtered by a naive substring match on the query.
+    fallback = _CURATED_GIFS
+    if query:
+        lowered = query.lower()
+        fallback = [g for g in fallback if lowered in g["title"].lower()]
+    return GifsResponse(
+        status="ok",
+        query=query,
+        gifs=[GifResponse(id=g["id"], title=g["title"], preview_url=g["url"], gif_url=g["url"]) for g in fallback],
+    )
 
 
 @router.get("/gaia", response_model=GaiaOverlayResponse)
