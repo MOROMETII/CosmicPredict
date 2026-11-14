@@ -2,6 +2,7 @@ export type Observation = {
   observation_id: string;
   epoch: string | null;
   band: string | null;
+  wavelength: number | null;
   ra: number | null;
   dec: number | null;
   source: "cached" | "live" | string;
@@ -82,4 +83,31 @@ export async function analyzePair(
       size: 128,
     }),
   });
+}
+
+export type UploadOptions = {
+  observation_id?: string;
+  ra?: number;
+  dec?: number;
+  epoch?: string;
+  band?: string;
+  wavelength?: number;
+};
+
+export async function uploadImage(file: File, options: UploadOptions = {}): Promise<Observation> {
+  const form = new FormData();
+  form.append("file", file);
+  if (options.observation_id) form.append("observation_id", options.observation_id);
+  if (options.ra !== undefined) form.append("ra", String(options.ra));
+  if (options.dec !== undefined) form.append("dec", String(options.dec));
+  if (options.epoch) form.append("epoch", options.epoch);
+  if (options.band) form.append("band", options.band);
+  if (options.wavelength !== undefined) form.append("wavelength", String(options.wavelength));
+
+  const response = await fetch(`${API_BASE}/upload`, { method: "POST", body: form });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Upload failed with ${response.status}`);
+  }
+  return response.json() as Promise<Observation>;
 }
