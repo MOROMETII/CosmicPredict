@@ -4,19 +4,21 @@ from __future__ import annotations
 
 import time
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import numpy as np
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from PIL import Image
 from scipy import ndimage
 
-from backend import storage
+from backend import config, storage
 from backend.api.schemas import AnalyzeRequest, AnalyzeResponse, EpochsResponse, ObservationResponse
-from backend.astronomy import render
+from backend.astronomy import compact, render
 from backend.astronomy.difference import significance_map
+from backend.astronomy.fits_loader import load_fits_observation
 
 router = APIRouter(prefix="/api")
 
@@ -28,6 +30,44 @@ def _parse_epoch(value: Any) -> datetime | None:
         return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+def _iso_epoch_string(value: Any) -> str | None:
+    if not value:
+        return None
+    text = str(value).strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    if "+" not in text and text.count(":") >= 2:
+        text += "+00:00"
+    return text
+
+
+def _safe_upload_filename(filename: str) -> str:
+    name = Path(filename).name
+    sanitized = "".join(character for character in name if character.isalnum() or character in "._-")
+    return sanitized or "upload.fits"
+
+
+def _record_from_fits_observation(observation: Any, observation_id: str, local_name: str) -> dict[str, Any]:
+    header = observation.header
+    detector = header.get("DETECTOR")
+    return {
+        "observation_id": observation_id,
+        "source_url": None,
+        "query_url": None,
+        "retrieved_at": datetime.now(timezone.utc).isoformat(),
+        "epoch": _iso_epoch_string(header.get("DATE-OBS")),
+        "band": str(detector) if detector is not None else None,
+        "ra": header.get("CRVAL1"),
+        "dec": header.get("CRVAL2"),
+        "header": header,
+        "local_path": local_name,
+        "storage_path": None,
+        "preview_storage_path": None,
+        "asset_status": "preview_available",
+        "source": "upload",
+    }
 
 
 _CATALOG_TTL_SECONDS = 30.0
@@ -236,6 +276,77 @@ def difference_preview(
 @router.get("/images", response_model=list[ObservationResponse])
 def images() -> list[ObservationResponse]:
     return list(_catalog().values())
+
+
+@router.post("/upload", response_model=ObservationResponse)
+async def upload_observation_file(
+    file: UploadFile = File(...),
+    observation_id: str | None = Form(None),
+    ra: float | None = Form(None),
+    dec: float | None = Form(None),
+    epoch: str | None = Form(None),
+    band: str | None = Form(None),
+    wavelength: float | None = Form(None),
+) -> ObservationResponse:
+    """Upload a FITS (.fits) or parsed snapshot (.npz) into the catalog."""
+    filename = file.filename or ""
+    suffix = Path(filename).suffix.lower()
+    data = await file.read()
+
+    if suffix in {".fits", ".fit", ".fz"}:
+        local_name = _safe_upload_filename(filename)
+        config.RAW_DIR.mkdir(parents=True, exist_ok=True)
+        local_path = config.RAW_DIR / local_name
+        local_path.write_bytes(data)
+        observation = load_fits_observation(local_path)
+        oid = observation_id or local_path.stem
+        record = _record_from_fits_observation(observation, oid, local_name)
+        snapshot = compact.observation_to_bytes(observation)
+    elif suffix == ".npz":
+        oid = observation_id or Path(filename).stem
+        header: dict[str, Any] = {}
+        if wavelength is not None:
+            header["WAVELENGTH"] = float(wavelength)
+        observation = compact.observation_from_bytes(data, header=header, path=filename)
+        local_name = f"{oid}.npz"
+        config.SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
+        (config.SNAPSHOT_DIR / local_name).write_bytes(data)
+        record = {
+            "observation_id": oid,
+            "source_url": None,
+            "query_url": None,
+            "retrieved_at": datetime.now(timezone.utc).isoformat(),
+            "epoch": _iso_epoch_string(epoch),
+            "band": band,
+            "ra": ra,
+            "dec": dec,
+            "header": header,
+            "local_path": local_name,
+            "storage_path": None,
+            "preview_storage_path": None,
+            "asset_status": "preview_available",
+            "source": "upload",
+        }
+        snapshot = data
+    else:
+        raise HTTPException(status_code=422, detail=f"unsupported file type {suffix or '(none)'}; upload a .fits or .npz file")
+
+    storage.upload_observation(record, snapshot_bytes=snapshot, snapshot_name=f"{oid}.npz")
+    _catalog_cache["expires_at"] = 0.0
+
+    header = record.get("header") or {}
+    return ObservationResponse(
+        observation_id=record["observation_id"],
+        epoch=_parse_epoch(record.get("epoch")),
+        band=record.get("band"),
+        wavelength=float(header["WAVELENGTH"]) if header.get("WAVELENGTH") is not None else None,
+        ra=float(record["ra"]) if record.get("ra") is not None else None,
+        dec=float(record["dec"]) if record.get("dec") is not None else None,
+        source=record.get("source") or "upload",
+        provenance={"local_path": record.get("local_path"), "header": header},
+        image_url=f"/api/images/{record['observation_id']}/preview",
+        asset_status="preview_available",
+    )
 
 
 def _analyze(request: AnalyzeRequest) -> AnalyzeResponse:
