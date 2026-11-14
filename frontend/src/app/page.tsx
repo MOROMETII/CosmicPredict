@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import NextLink from "next/link";
 import {
   Alert,
   Box,
@@ -11,6 +12,7 @@ import {
   Divider,
   Grid,
   IconButton,
+  Link,
   MenuItem,
   Paper,
   Select,
@@ -22,11 +24,13 @@ import {
 } from "@mui/material";
 import { useColorScheme } from "@mui/material/styles";
 import {
+  Bookmarks,
   DarkMode,
   ExpandLess,
   ExpandMore,
   LightMode,
   Search,
+  Slideshow,
   TravelExplore,
   Troubleshoot,
 } from "@mui/icons-material";
@@ -238,10 +242,35 @@ export default function Home() {
               </Box>
             </Stack>
             <Stack direction="row" spacing={1} alignItems="center">
+              <Tooltip title="Sky Scroll — swipe through real sky timelapses and flag anything suspicious">
+                <IconButton
+                  component={NextLink}
+                  href="/scroll"
+                  sx={{ color: "#e4e9f1", display: { xs: "inline-flex", sm: "none" } }}
+                  aria-label="Sky Scroll"
+                >
+                  <Slideshow />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Sky Scroll — swipe through real sky timelapses and flag anything suspicious">
+                <Button
+                  component={NextLink}
+                  href="/scroll"
+                  startIcon={<Slideshow />}
+                  sx={{ color: "#e4e9f1", display: { xs: "none", sm: "inline-flex" } }}
+                >
+                  Sky Scroll
+                </Button>
+              </Tooltip>
+              <Tooltip title="My flags — everything you marked for review">
+                <IconButton component={NextLink} href="/flags" sx={{ color: "#ffb74d" }} aria-label="My flags">
+                  <Bookmarks />
+                </IconButton>
+              </Tooltip>
               <Chip
                 label={provider ? `Data: ${provider === "supabase" ? "team archive" : "local cache"}` : "Backend offline"}
                 size="small"
-                sx={{ bgcolor: provider ? "rgba(255,255,255,.14)" : nasa.red, color: "#fff" }}
+                sx={{ bgcolor: provider ? "rgba(255,255,255,.14)" : nasa.red, color: "#fff", display: { xs: "none", sm: "inline-flex" } }}
               />
               <ModeToggle />
             </Stack>
@@ -530,7 +559,14 @@ export default function Home() {
                                   ...(selected ? {} : { color: "text.primary" }),
                                 }}
                               >
-                                <span>{item.candidate_id}</span>
+                                <span>
+                                  {item.candidate_id}
+                                  {item.gaia_checked && (
+                                    <span style={{ opacity: 0.8, fontSize: 11, marginLeft: 8 }}>
+                                      {item.gaia_match ? "★ known star" : "◇ not in star catalog"}
+                                    </span>
+                                  )}
+                                </span>
                                 <span style={{ opacity: 0.75 }}>{item.score.toFixed(1)}× noise</span>
                               </Button>
                             );
@@ -624,7 +660,7 @@ export default function Home() {
       <Box sx={{ bgcolor: nasa.black, color: "#9aa4b2", py: 4, mt: 2 }}>
         <Container maxWidth="lg">
           <Grid container spacing={3}>
-            <Grid size={{ xs: 12, md: 6 }}>
+            <Grid size={{ xs: 12, md: 4 }}>
               <Typography sx={{ color: "#fff", fontWeight: 700, mb: 1 }}>Data & provenance</Typography>
               <Typography variant="body2">
                 All images are Level-2 calibrated SPHEREx observations retrieved from the NASA/IPAC
@@ -633,12 +669,43 @@ export default function Home() {
                 are labeled and never analyzed.
               </Typography>
             </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
+            <Grid size={{ xs: 12, md: 4 }}>
               <Typography sx={{ color: "#fff", fontWeight: 700, mb: 1 }}>Glossary</Typography>
               <Typography variant="body2">
                 <strong>Epoch</strong> — the date of one observation · <strong>Detector band</strong> —
                 one of six infrared cameras · <strong>Candidate</strong> — an unconfirmed region where
                 brightness changed · <strong>Blink</strong> — flipping between two dates to spot motion
+              </Typography>
+            </Grid>
+            <Grid size={{ xs: 12, md: 4 }}>
+              <Typography sx={{ color: "#fff", fontWeight: 700, mb: 1 }}>NASA & partner resources</Typography>
+              <Typography variant="body2" component="div">
+                <Stack spacing={0.5} sx={{ "& a": { color: "#9fc3ef" } }}>
+                  <Link href="https://www.spaceappschallenge.org/2026/challenges/planet-x-and-spherex/?tab=resources" target="_blank" rel="noopener">
+                    Space Apps challenge: Planet X and SPHEREx
+                  </Link>
+                  <Link href="https://science.nasa.gov/mission/spherex/" target="_blank" rel="noopener">
+                    NASA SPHEREx mission
+                  </Link>
+                  <Link href="https://irsa.ipac.caltech.edu/Missions/spherex.html" target="_blank" rel="noopener">
+                    SPHEREx data at NASA/IPAC IRSA
+                  </Link>
+                  <Link href="https://doi.org/10.26131/IRSA652" target="_blank" rel="noopener">
+                    SPHEREx Quick Release images (DOI 10.26131/IRSA652)
+                  </Link>
+                  <Link href="https://irsa.ipac.caltech.edu/docs/program_interface/api_images.html" target="_blank" rel="noopener">
+                    IRSA Simple Image Access (SIA) API
+                  </Link>
+                  <Link href="https://gea.esac.esa.int/archive/" target="_blank" rel="noopener">
+                    ESA Gaia DR3 — powers the known-star overlay & candidate cross-match
+                  </Link>
+                  <Link href="http://byw.tools/wiseview" target="_blank" rel="noopener">
+                    WiseView (NASA WISE) — our model & per-candidate verification links
+                  </Link>
+                  <Link href="https://caltech-ipac.github.io/irsa-tutorials/" target="_blank" rel="noopener">
+                    SPHEREx tutorial notebooks — basis for our archive cutout pipeline
+                  </Link>
+                </Stack>
               </Typography>
             </Grid>
           </Grid>
