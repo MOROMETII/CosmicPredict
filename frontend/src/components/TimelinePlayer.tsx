@@ -17,8 +17,8 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { CenterFocusStrong, CloudDownload, FlashOn, Pause, PlayArrow, SkipNext, SkipPrevious } from "@mui/icons-material";
-import { fetchRegion, getTimeline, resolveAssetUrl, type Timeline } from "@/services/api";
+import { CenterFocusStrong, CloudDownload, FlashOn, Pause, PlayArrow, SkipNext, SkipPrevious, StarBorder } from "@mui/icons-material";
+import { fetchRegion, getGaiaOverlay, getTimeline, resolveAssetUrl, type GaiaOverlay, type Timeline } from "@/services/api";
 
 const FOV_OPTIONS = [5, 15, 30, 60];
 const SPEED_OPTIONS: { label: string; ms: number }[] = [
@@ -51,10 +51,53 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
   const [blink, setBlink] = useState(false);
   const [speedMs, setSpeedMs] = useState(600);
   const [showReticle, setShowReticle] = useState(true);
+  const [showGaia, setShowGaia] = useState(false);
+  const [gaia, setGaia] = useState<GaiaOverlay | null>(null);
   const [fetching, setFetching] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
   const imagesRef = useRef<HTMLImageElement[]>([]);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // The backend starts the archive download in the background and answers
+  // immediately (a full fetch takes minutes — longer than the dev proxy keeps
+  // a socket open), so we poll the same endpoint until it finishes.
+  const startArchiveFetch = useCallback(() => {
+    setFetching(true);
+    setFetchError(null);
+    const poll = (attempt: number) => {
+      fetchRegion(ra, dec)
+        .then((result) => {
+          if (!mountedRef.current) return;
+          if (result.status === "already_fetched" || result.status === "fetched") {
+            setFetching(false);
+            setRefresh((value) => value + 1);
+          } else if (result.status === "failed") {
+            setFetching(false);
+            setFetchError(result.message ?? "The archive fetch failed. Try again shortly.");
+          } else if (attempt >= 60) {
+            // ~5 minutes of polling: the job may still finish server-side.
+            setFetching(false);
+            setFetchError("The archive is responding slowly. The download continues in the background — try again in a minute.");
+          } else {
+            window.setTimeout(() => poll(attempt + 1), 5000);
+          }
+        })
+        .catch((requestError: Error) => {
+          if (!mountedRef.current) return;
+          setFetching(false);
+          setFetchError(requestError.message);
+        });
+    };
+    poll(0);
+  }, [ra, dec]);
 
   // Reset view state the moment the query changes (React's recommended
   // render-time adjustment pattern, instead of setState inside the effect).
@@ -104,6 +147,28 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ra, dec, fov, band, refresh]);
+
+  // A new sky frame invalidates the star overlay (render-time adjustment,
+  // same pattern as the query reset above).
+  const gaiaKey = `${ra}|${dec}|${fov}`;
+  const [lastGaiaKey, setLastGaiaKey] = useState(gaiaKey);
+  if (gaiaKey !== lastGaiaKey) {
+    setLastGaiaKey(gaiaKey);
+    setGaia(null);
+  }
+
+  // Known-star overlay from the Gaia DR3 catalog (ESA): fetched only while
+  // the toggle is on, re-fetched when the sky frame changes.
+  useEffect(() => {
+    if (!showGaia) return;
+    let active = true;
+    getGaiaOverlay(ra, dec, fov)
+      .then((result) => active && setGaia(result))
+      .catch(() => active && setGaia(null));
+    return () => {
+      active = false;
+    };
+  }, [showGaia, ra, dec, fov]);
 
   useEffect(() => {
     if (!playing || frames.length < 2) return;
@@ -189,14 +254,7 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
               variant="contained"
               startIcon={fetching ? <CircularProgress size={14} color="inherit" /> : <CloudDownload />}
               disabled={fetching}
-              onClick={() => {
-                setFetching(true);
-                setFetchError(null);
-                fetchRegion(ra, dec)
-                  .then(() => setRefresh((value) => value + 1))
-                  .catch((requestError: Error) => setFetchError(requestError.message))
-                  .finally(() => setFetching(false));
-              }}
+              onClick={startArchiveFetch}
             >
               {fetching ? "Searching…" : "Search the NASA archive"}
             </Button>
@@ -280,6 +338,48 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
                 />
               </Tooltip>
             )}
+            {/* Known-star markers from the Gaia DR3 catalog (ESA). Anything
+                that changes but has NO ring here is not a catalogued star —
+                exactly the interesting case. */}
+            {showGaia &&
+              gaia?.sources.map((star) => (
+                <Tooltip
+                  key={star.source_id}
+                  title={`Known star · Gaia DR3 ${star.source_id}${star.g_mag != null ? ` · G=${star.g_mag.toFixed(1)}` : ""}${
+                    star.pm_total_mas_yr != null && star.pm_total_mas_yr > 100
+                      ? ` · fast mover (${Math.round(star.pm_total_mas_yr)} mas/yr)`
+                      : ""
+                  }${star.variable_flag === "VARIABLE" ? " · catalogued variable" : ""}`}
+                >
+                  <Box
+                    sx={{
+                      position: "absolute",
+                      left: `${star.x_frac * 100}%`,
+                      top: `${star.y_frac * 100}%`,
+                      width: 14,
+                      height: 14,
+                      transform: "translate(-50%, -50%)",
+                      borderRadius: "50%",
+                      border:
+                        star.variable_flag === "VARIABLE"
+                          ? "1.5px solid rgba(255,120,220,.95)"
+                          : "1.5px dashed rgba(255,200,80,.9)",
+                      pointerEvents: "auto",
+                    }}
+                  />
+                </Tooltip>
+              ))}
+            {showGaia && gaia && (
+              <Chip
+                size="small"
+                label={
+                  gaia.status === "ok"
+                    ? `${gaia.sources.length} known stars · Gaia DR3 (ESA)`
+                    : "Gaia catalog unavailable"
+                }
+                sx={{ position: "absolute", top: 40, left: 10, bgcolor: "rgba(0,0,0,.72)", color: "#ffd890", fontSize: 11 }}
+              />
+            )}
           </Box>
 
           {!allLoaded && (
@@ -342,6 +442,17 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
                 sx={{ px: 1 }}
               >
                 <CenterFocusStrong sx={{ fontSize: 16 }} />
+              </ToggleButton>
+            </Tooltip>
+            <Tooltip title="Ring the known catalogued stars (ESA Gaia DR3) — a changing dot with no ring is not in the star catalog">
+              <ToggleButton
+                value="gaia"
+                selected={showGaia}
+                size="small"
+                onChange={() => setShowGaia((value) => !value)}
+                sx={{ px: 1 }}
+              >
+                <StarBorder sx={{ fontSize: 16 }} />
               </ToggleButton>
             </Tooltip>
             <Select size="small" value={speedMs} onChange={(event) => setSpeedMs(Number(event.target.value))} sx={{ fontSize: 12 }}>
