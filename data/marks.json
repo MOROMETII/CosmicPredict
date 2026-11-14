@@ -149,6 +149,21 @@
    "note": null,
    "source": "scroll",
    "preview_url": "/api/cutout/live_248p1600_66p7600_level2_2026W01_1A_0257_3D6_spx_l2bv272026211?ra=248.16&dec=66.76&fov=12.0&size=256"
+  },
+  {
+   "id": "9f48e4f22127",
+   "created_at": "2026-11-14T10:17:18.186630+00:00",
+   "ra": 248.16,
+   "dec": 66.76,
+   "spot_ra": 248.132259,
+   "spot_dec": 66.770685,
+   "fov_arcmin": 12.0,
+   "band": "6",
+   "observation_id": "live_248p1600_66p7600_level2_2026W01_1A_0257_3D6_spx_l2bv272026211",
+   "epoch": "2025-12-30T03:43:16.119000Z",
+   "note": null,
+   "source": "scroll",
+   "preview_url": "/api/cutout/live_248p1600_66p7600_level2_2026W01_1A_0257_3D6_spx_l2bv272026211?ra=248.16&dec=66.76&fov=12.0&size=256"
   }
  ]
 }

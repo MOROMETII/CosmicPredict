@@ -28,6 +28,7 @@ import {
   Pause,
   PlayArrow,
   Share,
+  Speed,
   StarBorder,
   TravelExplore,
 } from "@mui/icons-material";
@@ -45,9 +46,15 @@ import {
 import { nasa } from "@/theme";
 import ScrollTutorial, { tutorialSeen } from "@/components/ScrollTutorial";
 
-const FRAME_MS = 700;
 const DOUBLE_TAP_MS = 300;
 const HOLD_MS = 280;
+
+/** Replay speeds: multiplier label + milliseconds per observation date. */
+const SPEEDS = [
+  { label: "0.5×", ms: 1400 },
+  { label: "1×", ms: 700 },
+  { label: "2×", ms: 350 },
+];
 
 type TapSpot = { xFrac: number; yFrac: number };
 
@@ -151,6 +158,7 @@ function ReelCard({
   const [frames, setFrames] = useState<TimelineFrame[] | null>(null);
   const [frame, setFrame] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [speedIndex, setSpeedIndex] = useState(1);
   const [holding, setHolding] = useState(false);
   const [spot, setSpot] = useState<TapSpot | null>(null);
   const [burst, setBurst] = useState(false);
@@ -200,11 +208,13 @@ function ReelCard({
     };
   }, [requested, frames, item]);
 
+  const speedMs = SPEEDS[speedIndex].ms;
+
   useEffect(() => {
     if (!visible || holding || paused || !frames || frames.length < 2) return;
-    const timer = window.setInterval(() => setFrame((current) => (current + 1) % frames.length), FRAME_MS);
+    const timer = window.setInterval(() => setFrame((current) => (current + 1) % frames.length), speedMs);
     return () => window.clearInterval(timer);
-  }, [visible, holding, paused, frames]);
+  }, [visible, holding, paused, frames, speedMs]);
 
   // Known stars (ESA Gaia DR3) — fetched once when the toggle first turns on.
   useEffect(() => {
@@ -396,12 +406,12 @@ function ReelCard({
                     {segment < frame && <Box sx={{ width: "100%", height: "100%", bgcolor: "#fff" }} />}
                     {segment === frame && (
                       <Box
-                        key={`fill-${frame}`}
+                        key={`fill-${frame}-${speedMs}`}
                         sx={{
                           height: "100%",
                           bgcolor: "#fff",
                           width: frames.length < 2 ? "100%" : undefined,
-                          animation: frames.length >= 2 ? `epochFill ${FRAME_MS}ms linear forwards` : undefined,
+                          animation: frames.length >= 2 ? `epochFill ${speedMs}ms linear forwards` : undefined,
                           animationPlayState: holding || paused || !visible ? "paused" : "running",
                         }}
                       />
@@ -466,6 +476,13 @@ function ReelCard({
               title={paused ? "Resume the replay" : "Pause on the current date"}
               active={paused}
               onClick={() => setPaused((value) => !value)}
+            />
+            <RailButton
+              icon={<Speed sx={{ fontSize: 26 }} />}
+              label={SPEEDS[speedIndex].label}
+              title="Replay speed — cycles 0.5×, 1×, 2×"
+              active={speedIndex !== 1}
+              onClick={() => setSpeedIndex((value) => (value + 1) % SPEEDS.length)}
             />
             <RailButton
               icon={<BookmarkAdd sx={{ fontSize: 26 }} />}
