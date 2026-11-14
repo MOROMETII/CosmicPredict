@@ -26,7 +26,6 @@ import {
   Close,
   Favorite,
   HelpOutline,
-  Leaderboard,
   Pause,
   PlayArrow,
   RocketLaunch,
@@ -41,13 +40,11 @@ import {
   getFeed,
   getGaiaOverlay,
   getMarks,
-  getSurvey,
   getTimeline,
   resolveAssetUrl,
   saveRegion,
   type FeedItem,
   type GaiaOverlay,
-  type Survey,
   type TimelineFrame,
 } from "@/services/api";
 import { nasa } from "@/theme";
@@ -746,17 +743,6 @@ export default function ScrollPage() {
     setTutorialDismissed(true);
     setTutorialForced(false);
   }, []);
-
-  // Engagement leaderboard (the /survey ranking).
-  const [surveyOpen, setSurveyOpen] = useState(false);
-  const [survey, setSurvey] = useState<Survey | null>(null);
-  const openSurvey = useCallback(() => {
-    setSurveyOpen(true);
-    getSurvey()
-      .then(setSurvey)
-      .catch(() => setSurvey({ status: "error", regions: [], caveats: [] }));
-  }, []);
-
   // Autoscroll: advance to the next reel on a timer. Pauses when the user
   // manually scrolls, taps a card, or opens the tutorial; loops at the end.
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -843,11 +829,6 @@ export default function ScrollPage() {
               <HelpOutline />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Engagement leaderboard">
-            <IconButton onClick={openSurvey} sx={{ color: "#8b97a8" }} aria-label="Open leaderboard">
-              <Leaderboard />
-            </IconButton>
-          </Tooltip>
           <Button
             component={Link}
             href="/flags"
@@ -904,63 +885,6 @@ export default function ScrollPage() {
       )}
 
       {tutorialOpen && <ScrollTutorial onClose={closeTutorial} />}
-
-      <Dialog open={surveyOpen} onClose={() => setSurveyOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle sx={{ fontSize: 17 }}>
-          Engagement leaderboard
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-            Regions ranked by how much people interacted with them. This is a social measure, not a
-            scientific ranking — a high score means people talked about it, not that the sky is
-            objectively more interesting.
-          </Typography>
-          {survey === null ? (
-            <Stack alignItems="center" sx={{ py: 3 }}>
-              <CircularProgress size={22} />
-            </Stack>
-          ) : survey.regions.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              No interactions yet — flag, comment, or save a region to see it here.
-            </Typography>
-          ) : (
-            <Stack spacing={1}>
-              {survey.regions.map((region, index) => (
-                <Stack
-                  key={region.region_key}
-                  direction="row"
-                  alignItems="center"
-                  spacing={1.5}
-                  sx={{ p: 1, borderRadius: 1, bgcolor: index === 0 ? "rgba(255,183,77,.12)" : "rgba(255,255,255,.04)" }}
-                >
-                  <Typography sx={{ fontWeight: 800, color: index === 0 ? "#ffb74d" : "text.secondary", minWidth: 20 }}>
-                    {index + 1}
-                  </Typography>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography sx={{ fontWeight: 700, fontSize: 13 }}>
-                      RA {region.ra.toFixed(2)}° · Dec {region.dec.toFixed(2)}°
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {region.flags} flag{region.flags === 1 ? "" : "s"} · {region.comments} comment
-                      {region.comments === 1 ? "" : "s"} · {region.gifs} gif{region.gifs === 1 ? "" : "s"} ·{" "}
-                      {region.saves} save{region.saves === 1 ? "" : "s"} · {region.people} person
-                      {region.people === 1 ? "" : "people"}
-                    </Typography>
-                  </Box>
-                  <Typography sx={{ fontWeight: 800, color: "#ffb74d", fontSize: 15 }}>
-                    {region.score}
-                  </Typography>
-                </Stack>
-              ))}
-            </Stack>
-          )}
-          {survey && survey.caveats.length > 0 && (
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1.5 }}>
-              {survey.caveats.join(" ")}
-            </Typography>
-          )}
-        </DialogContent>
-      </Dialog>
 
       <Snackbar
         open={toast !== null}

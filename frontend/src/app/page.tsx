@@ -291,6 +291,15 @@ export default function Home() {
                   Research
                 </Button>
               </Tooltip>
+              <Tooltip title="Engagement leaderboard — most-interacted sky regions">
+                <Button
+                  component={NextLink}
+                  href="/leaderboard"
+                  sx={{ color: "text.primary", display: { xs: "none", md: "inline-flex" } }}
+                >
+                  Leaderboard
+                </Button>
+              </Tooltip>
               <Tooltip title="Sky Scroll — swipe through real sky timelapses and flag anything suspicious">
                 <IconButton
                   component={NextLink}
