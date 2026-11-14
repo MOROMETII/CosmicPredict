@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from io import BytesIO
 from datetime import datetime
 from functools import lru_cache
@@ -15,54 +16,62 @@ from fastapi.responses import Response
 from PIL import Image
 from scipy import ndimage
 
+from backend import storage
 from backend.ai.inference import JEPAInference
 from backend.api.schemas import AnalyzeRequest, AnalyzeResponse, EpochsResponse, ObservationResponse
 from backend.astronomy.calibration import robust_normalize
 from backend.astronomy.fits_loader import load_fits_observation
 
 ROOT = Path(__file__).resolve().parents[2]
-RAW_DIR = ROOT / "data" / "raw"
 CHECKPOINT = ROOT / "models" / "checkpoints" / "jepa.pt"
 
 router = APIRouter(prefix="/api")
 
 
-def _observation_id(path: Path) -> str:
-    return path.stem
+def _parse_epoch(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+_CATALOG_TTL_SECONDS = 30.0
+_catalog_cache: dict[str, Any] = {"expires_at": 0.0, "records": {}}
 
 
 def _catalog() -> dict[str, ObservationResponse]:
+    now = time.monotonic()
+    if now < _catalog_cache["expires_at"]:
+        return _catalog_cache["records"]
     records: dict[str, ObservationResponse] = {}
-    for path in sorted(RAW_DIR.glob("*.fits")):
-        try:
-            observation = load_fits_observation(path)
-        except ValueError:
-            continue
-        header = observation.header
-        epoch = None
-        if header.get("DATE-OBS"):
-            epoch = datetime.fromisoformat(str(header["DATE-OBS"]).replace("Z", "+00:00"))
-        records[_observation_id(path)] = ObservationResponse(
-            observation_id=_observation_id(path),
-            epoch=epoch,
-            band=str(header["BAND"]) if header.get("BAND") is not None else None,
-            ra=float(header["CRVAL1"]) if header.get("CRVAL1") is not None else None,
-            dec=float(header["CRVAL2"]) if header.get("CRVAL2") is not None else None,
+    for record in storage.list_observations():
+        observation_id = record["observation_id"]
+        records[observation_id] = ObservationResponse(
+            observation_id=observation_id,
+            epoch=_parse_epoch(record.get("epoch")),
+            band=str(record["band"]) if record.get("band") is not None else None,
+            ra=float(record["ra"]) if record.get("ra") is not None else None,
+            dec=float(record["dec"]) if record.get("dec") is not None else None,
+            source=record.get("source") or "cached",
             provenance={
-                "source_path": str(path.relative_to(ROOT)),
-                "header": header,
+                "source_path": record.get("local_path"),
+                "storage_path": record.get("storage_path"),
+                "header": record.get("header") or {},
             },
-            image_url=f"/api/images/{_observation_id(path)}/preview",
-            asset_status="preview_available",
+            image_url=f"/api/images/{observation_id}/preview",
+            asset_status=record.get("asset_status") or "preview_available",
         )
+    _catalog_cache["records"] = records
+    _catalog_cache["expires_at"] = now + _CATALOG_TTL_SECONDS
     return records
 
 
 def _load_patch(observation_id: str, row: int, column: int, size: int) -> np.ndarray:
-    record = _catalog().get(observation_id)
-    if record is None:
+    if observation_id not in _catalog():
         raise HTTPException(status_code=404, detail=f"unknown observation: {observation_id}")
-    path = ROOT / record.provenance["source_path"]
+    path = storage.resolve_asset_path(observation_id)
     calibrated = robust_normalize(load_fits_observation(path))
     end_row, end_column = row + size, column + size
     if end_row > calibrated.image.shape[0] or end_column > calibrated.image.shape[1]:
@@ -204,7 +213,7 @@ def _candidates_from_map(
 def health() -> dict[str, Any]:
     return {
         "status": "ok",
-        "provider": "cached",
+        "provider": "supabase" if storage.is_supabase_available() else "cached",
         "observation_count": len(_catalog()),
         "jepa": _jepa_status(),
     }
@@ -244,14 +253,11 @@ def image(observation_id: str) -> ObservationResponse:
 
 @router.get("/images/{observation_id}/preview")
 def image_preview(observation_id: str) -> Response:
-    record = _catalog().get(observation_id)
-    if record is None:
+    if observation_id not in _catalog():
         raise HTTPException(status_code=404, detail=f"unknown observation: {observation_id}")
-    source_path = record.provenance.get("source_path")
-    if not isinstance(source_path, str):
-        raise HTTPException(status_code=500, detail="observation provenance has no source path")
     try:
-        observation = load_fits_observation(ROOT / source_path)
+        path = storage.resolve_asset_path(observation_id)
+        observation = load_fits_observation(path)
         png = _false_color(observation.image)
     except (OSError, ValueError, TypeError) as error:
         raise HTTPException(status_code=500, detail=f"could not render observation preview: {error}") from error
