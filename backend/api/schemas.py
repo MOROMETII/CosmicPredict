@@ -33,7 +33,6 @@ class AnalyzeRequest(BaseModel):
     row: int = Field(default=0, ge=0)
     column: int = Field(default=0, ge=0)
     size: int = Field(default=128, ge=8, le=1024, multiple_of=8)
-    run_jepa: bool = False
 
 
 class CandidateResponse(BaseModel):
@@ -55,11 +54,7 @@ class AnalyzeResponse(BaseModel):
     context_epoch: str
     target_epoch: str
     difference_score: float | None = None
-    jepa_score: float | None = None
-    score_kind: str | None = None
-    anomaly_map: list[list[float]] | None = None
     difference_image_url: str | None = None
-    jepa_status: str = "not_requested"
     candidates: list[CandidateResponse] = Field(default_factory=list)
     caveats: list[str] = Field(default_factory=list)
     message: str | None = None

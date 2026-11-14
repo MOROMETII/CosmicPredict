@@ -1,8 +1,8 @@
 import { Alert, Box, Chip, Divider, Stack, Typography } from "@mui/material";
 import { AutoAwesome, InfoOutlined } from "@mui/icons-material";
-import type { Analysis, Candidate } from "@/services/api";
+import type { Candidate } from "@/services/api";
 
-export default function DiscoveryPanel({ candidate, analysis }: { candidate: Candidate | null; analysis: Analysis | null }) {
+export default function DiscoveryPanel({ candidate }: { candidate: Candidate | null }) {
   if (!candidate) {
     return <Stack alignItems="center" justifyContent="center" sx={{ minHeight: 230, textAlign: "center", color: "rgba(188,204,223,.62)" }}><AutoAwesome sx={{ color: "#71e5c1", fontSize: 30, mb: 1 }} /><Typography sx={{ fontWeight: 700, color: "#e5f0ff" }}>Select a candidate</Typography><Typography sx={{ fontSize: 12, maxWidth: 240, mt: .5 }}>Run Find Changes, then select an overlay to inspect its evidence.</Typography></Stack>;
   }
@@ -19,7 +19,6 @@ export default function DiscoveryPanel({ candidate, analysis }: { candidate: Can
         <Box sx={{ flex: 1, p: 1.2, bgcolor: "rgba(100,140,180,.1)", borderRadius: 2 }}><Typography sx={{ fontSize: 11, color: "rgba(188,204,223,.6)" }}>Area</Typography><Typography sx={{ fontWeight: 800 }}>{candidate.area} px</Typography></Box>
       </Stack>
       <Alert icon={<InfoOutlined />} severity="info" sx={{ bgcolor: "rgba(73,132,174,.1)", color: "#b9d8f4", fontSize: 11, "& .MuiAlert-icon": { color: "#80c5ed" } }}>{candidate.caveat}</Alert>
-      {analysis?.jepa_status && <Typography sx={{ fontSize: 11, color: "rgba(188,204,223,.55)" }}>JEPA-inspired signal: {analysis.jepa_status === "not_requested" ? "not requested" : analysis.jepa_status}</Typography>}
     </Stack>
   );
 }
