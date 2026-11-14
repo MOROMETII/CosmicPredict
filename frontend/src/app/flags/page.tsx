@@ -44,14 +44,23 @@ export default function FlagsPage() {
 
   return (
     <Box sx={{ minHeight: "100dvh" }}>
-      <Box sx={{ bgcolor: "#ffffff", color: "text.primary", py: 1.5, borderTop: "3px solid #f64137", borderBottom: "1px solid #d1d1d1" }}>
+      <Box
+        sx={(theme) => ({
+          bgcolor: theme.vars ? theme.vars.palette.background.paper : "background.paper",
+          color: "text.primary",
+          py: 1.5,
+          borderTop: "3px solid #f64137",
+          borderBottom: "1px solid",
+          borderColor: "divider",
+        })}
+      >
         <Container maxWidth="lg">
           <Stack direction="row" justifyContent="space-between" alignItems="center">
             <Stack direction="row" spacing={1} alignItems="center">
               <IconButton component={Link} href="/" sx={{ color: "text.secondary" }} aria-label="Back to explorer">
                 <ArrowBack />
               </IconButton>
-              <Bookmarks sx={{ color: "#1c67e3" }} />
+              <Bookmarks sx={{ color: "primary.main" }} />
               <Typography variant="h6" sx={{ letterSpacing: "0.02em", color: "text.primary" }}>
                 My flags
               </Typography>
