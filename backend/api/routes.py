@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import time
+import urllib.parse
+import urllib.request
 from io import BytesIO
 from datetime import datetime
 from typing import Any
@@ -18,12 +21,22 @@ from backend.api.schemas import (
     AnalyzeRegionRequest,
     AnalyzeRequest,
     AnalyzeResponse,
+    CommentCreateRequest,
+    CommentResponse,
+    CommentsResponse,
     EpochsResponse,
     FeedItem,
     FeedResponse,
     GaiaMatchResponse,
     GaiaOverlayResponse,
     GaiaSourceResponse,
+    GifResponse,
+    GifsResponse,
+    SaveCreateRequest,
+    SaveResponse,
+    SavesResponse,
+    SurveyItem,
+    SurveyResponse,
     MarkCreateRequest,
     MarkResponse,
     MarksResponse,
@@ -738,6 +751,15 @@ def fetch_region(
     return result
 
 
+def _interaction_count() -> int:
+    """Total social interactions, used to bust the feed cache when scoring changes."""
+    from backend.storage import comments as comments_store
+    from backend.storage import marks as marks_store
+    from backend.storage import saves as saves_store
+
+    return len(marks_store.list_marks()) + len(comments_store.list_comments_all()) + len(saves_store.list_saves())
+
+
 def _feed_positions() -> list[tuple[float, float, str]]:
     """Candidate feed centers: fetched regions (exact) plus coarse 1-degree cells.
 
@@ -780,11 +802,14 @@ def feed(
     are interleaved so scrolling varies, and offset tiles show more of each
     region than just its center.
     """
-    cache_key = (len(_catalog()), fov, limit)
+    cache_key = (len(_catalog()), fov, limit, _interaction_count())
     cached = _feed_cache.get(cache_key)
     if cached is not None:
         return cached
 
+    from backend.storage import scoring
+
+    scores = scoring.all_scores()
     records = list(_catalog().values())
     half_fov_deg = fov / 60.0 / 2.0
     per_region: list[list[FeedItem]] = []
@@ -821,12 +846,16 @@ def feed(
                     band=band,
                     n_frames=len(covering),
                     region_key=key,
+                    **scores.get(key, {"score": 0, "flags": 0, "comments": 0, "gifs": 0, "people": 0, "saves": 0}),
                 )
             )
         if items:
             per_region.append(items)
 
-    # Interleave regions so consecutive tiles are usually different sky.
+    # Order regions by engagement score (highest first), then interleave the
+    # offset tiles within each region so scrolling varies without hiding the
+    # higher-scoring regions behind lower ones.
+    per_region.sort(key=lambda items: items[0].score, reverse=True)
     interleaved: list[FeedItem] = []
     while per_region and len(interleaved) < limit:
         for items in list(per_region):
@@ -841,6 +870,7 @@ def feed(
         caveats=[
             "Every tile replays real SPHEREx observations; nothing in the feed is synthetic.",
             "Tiles come from the locally cached regions — fetch more positions to grow the feed.",
+            "Ordering reflects social engagement (flags, comments, GIFs, people), not scientific significance.",
         ],
         message=None if interleaved else "No cached region has two epochs yet. Fetch a position from the archive first.",
     )
@@ -891,6 +921,7 @@ def create_mark(request: MarkCreateRequest) -> MarkResponse:
             "epoch": request.epoch,
             "note": note or None,
             "source": request.source,
+            "region_key": request.region_key,
             "preview_url": preview_url,
         }
     )
@@ -904,6 +935,151 @@ def delete_mark(mark_id: str) -> dict[str, str]:
     if not marks_store.delete_mark(mark_id):
         raise HTTPException(status_code=404, detail=f"unknown mark: {mark_id}")
     return {"status": "deleted", "id": mark_id}
+
+
+@router.get("/comments", response_model=CommentsResponse)
+def list_comments(region_key: str = Query(..., max_length=64)) -> CommentsResponse:
+    """Comments on one sky region (the Sky Scroll reel)."""
+    from backend.storage import comments as comments_store
+
+    return CommentsResponse(
+        status="ok",
+        region_key=region_key,
+        comments=[CommentResponse(**comment) for comment in comments_store.list_comments(region_key)],
+        caveats=["Comments are social annotations, not scientific findings or detections."],
+    )
+
+
+@router.post("/comments", response_model=CommentResponse)
+def create_comment(request: CommentCreateRequest) -> CommentResponse:
+    """Post a comment on a sky region."""
+    from backend.storage import comments as comments_store
+
+    comment = comments_store.add_comment(
+        request.region_key,
+        request.author,
+        request.body,
+        gif_url=request.gif_url,
+        gif_still_url=request.gif_still_url,
+        gif_title=request.gif_title,
+    )
+    return CommentResponse(**comment)
+
+
+@router.post("/saves", response_model=SaveResponse)
+def create_save(request: SaveCreateRequest) -> SaveResponse:
+    """Record a double-tap save (like) on a sky region."""
+    from backend.storage import saves as saves_store
+
+    save = saves_store.add_save(request.region_key)
+    return SaveResponse(**save)
+
+
+@router.get("/saves", response_model=SavesResponse)
+def get_saves(region_key: str = Query(..., max_length=64)) -> SavesResponse:
+    """How many times this sky region has been saved (liked)."""
+    from backend.storage import saves as saves_store
+
+    return SavesResponse(
+        status="ok",
+        region_key=region_key,
+        count=saves_store.count_saves(region_key),
+    )
+
+
+@router.get("/survey", response_model=SurveyResponse)
+def survey() -> SurveyResponse:
+    """Engagement ranking of every sky region with any interaction.
+
+    Regions are ranked by their social score (flags + comments + GIFs + people
+    + saves), highest first. This is a social-engagement leaderboard, not a
+    scientific ranking: a high score means people talked about it, not that the
+    sky there is objectively more interesting.
+    """
+    from backend.storage import scoring
+
+    items: list[SurveyItem] = []
+    for region_key, breakdown in scoring.all_scores().items():
+        try:
+            ra_text, dec_text = region_key.split(",", 1)
+            ra, dec = float(ra_text) % 360.0, float(dec_text)
+        except ValueError:
+            continue
+        items.append(
+            SurveyItem(
+                region_key=region_key,
+                ra=ra,
+                dec=dec,
+                score=breakdown["score"],
+                flags=breakdown["flags"],
+                comments=breakdown["comments"],
+                gifs=breakdown["gifs"],
+                people=breakdown["people"],
+                saves=breakdown["saves"],
+            )
+        )
+    items.sort(key=lambda item: item.score, reverse=True)
+    return SurveyResponse(
+        status="ok" if items else "empty",
+        regions=items,
+        caveats=[
+            "This is a social-engagement leaderboard, not a scientific ranking.",
+            "Score = 5·flags + 2·comments + 1·gifs + 3·people + 1·saves.",
+        ],
+    )
+
+
+# Curated fallback GIFs (Giphy media CDN URLs) used when no Giphy API key is
+# configured, so the picker works offline for the demo.
+_CURATED_GIFS = [
+    {"id": "3o7abKhOpu0NwenH3O", "title": "Space", "url": "https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif"},
+    {"id": "26tPplGWjN0xLybiU", "title": "Rocket", "url": "https://media.giphy.com/media/26tPplGWjN0xLybiU/giphy.gif"},
+    {"id": "l0MYt5jPR6QX5pnqM", "title": "Galaxy", "url": "https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif"},
+    {"id": "26u4cqiYI30juCOGY", "title": "Earth", "url": "https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif"},
+    {"id": "xT9DPPqwOCoxi3ASWc", "title": "Stars", "url": "https://media.giphy.com/media/xT9DPPqwOCoxi3ASWc/giphy.gif"},
+    {"id": "3o7TKMt1VVNkHV2PaE", "title": "Astronaut", "url": "https://media.giphy.com/media/3o7TKMt1VVNkHV2PaE/giphy.gif"},
+    {"id": "l41lV3VY7ZzcJzBhO", "title": "Nebula", "url": "https://media.giphy.com/media/l41lV3VY7ZzcJzBhO/giphy.gif"},
+    {"id": "xT9IgG50Fb7Mi0prBC", "title": "Light", "url": "https://media.giphy.com/media/xT9IgG50Fb7Mi0prBC/giphy.gif"},
+]
+
+
+@router.get("/gifs", response_model=GifsResponse)
+def search_gifs(query: str = Query(default="", max_length=100)) -> GifsResponse:
+    """Search GIFs via Giphy, with a curated fallback when no key is configured."""
+    import urllib.request
+
+    if config.GIPHY_API_KEY:
+        params = urllib.parse.urlencode(
+            {"api_key": config.GIPHY_API_KEY, "q": query or "space", "limit": 24, "rating": "pg"}
+        )
+        try:
+            request = urllib.request.Request(f"https://api.giphy.com/v1/gifs/search?{params}", headers={"User-Agent": "cosmic-predict/0.1"})
+            with urllib.request.urlopen(request, timeout=10) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            gifs = [
+                GifResponse(
+                    id=str(item["id"]),
+                    title=item.get("title") or "GIF",
+                    preview_url=item["images"]["fixed_height"]["url"],
+                    gif_url=item["images"]["original"]["url"],
+                )
+                for item in payload.get("data", [])
+            ]
+            if gifs:
+                return GifsResponse(status="ok", query=query, gifs=gifs)
+        except Exception as error:  # noqa: BLE001 - fall through to curated set on failure
+            print(f"Giphy search failed: {error}")
+
+    # Curated fallback, filtered by a naive substring match on the query.
+    fallback = _CURATED_GIFS
+    if query:
+        lowered = query.lower()
+        fallback = [g for g in fallback if lowered in g["title"].lower()]
+    return GifsResponse(
+        status="ok",
+        query=query,
+        gifs=[GifResponse(id=g["id"], title=g["title"], preview_url=g["url"], gif_url=g["url"]) for g in fallback],
+    )
 
 
 @router.get("/gaia", response_model=GaiaOverlayResponse)
