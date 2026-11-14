@@ -391,14 +391,20 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
             </Box>
           )}
 
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.5, maxWidth: 640, mx: "auto" }}>
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            justifyContent="center"
+            sx={{ mt: 1.5, maxWidth: 640, mx: "auto", flexWrap: "wrap", rowGap: 1 }}
+          >
             <Tooltip title="Previous date">
               <IconButton size="small" onClick={() => step(-1)}>
                 <SkipPrevious />
               </IconButton>
             </Tooltip>
             <Tooltip title={playing ? "Pause" : "Play through time"}>
-              <span>
+              <span style={{ display: "inline-flex", flexShrink: 0 }}>
                 <IconButton
                   onClick={() => setPlaying((value) => !value)}
                   disabled={!canPlay}
@@ -455,13 +461,23 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
                 <StarBorder sx={{ fontSize: 16 }} />
               </ToggleButton>
             </Tooltip>
-            <Select size="small" value={speedMs} onChange={(event) => setSpeedMs(Number(event.target.value))} sx={{ fontSize: 12 }}>
+            <Select
+              size="small"
+              value={speedMs}
+              onChange={(event) => setSpeedMs(Number(event.target.value))}
+              sx={{ fontSize: 12, flexShrink: 0 }}
+            >
               {SPEED_OPTIONS.map((option) => (
                 <MenuItem key={option.ms} value={option.ms} sx={{ fontSize: 12 }}>
                   {option.label}
                 </MenuItem>
               ))}
             </Select>
+          </Stack>
+
+          {/* Frame scrubber always gets its own full-width row so the transport
+              controls never overflow horizontally on narrow screens. */}
+          <Box sx={{ mt: 1.5, maxWidth: 640, mx: "auto" }}>
             <Slider
               size="small"
               min={0}
@@ -471,9 +487,8 @@ export default function TimelinePlayer({ ra, dec, fov, onFovChange, onTimeline }
                 setPlaying(false);
                 setFrame(value as number);
               }}
-              sx={{ flex: 1 }}
             />
-          </Stack>
+          </Box>
 
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1.5, maxWidth: 640, mx: "auto" }}>
             {timeline?.caveats.join(" ")}

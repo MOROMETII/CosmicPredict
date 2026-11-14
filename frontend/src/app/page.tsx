@@ -24,6 +24,7 @@ import {
 } from "@mui/material";
 import { useColorScheme } from "@mui/material/styles";
 import {
+  AutoAwesome,
   Bookmarks,
   DarkMode,
   ExpandLess,
@@ -37,6 +38,7 @@ import {
 import { nasa } from "@/theme";
 import {
   analyzeRegion,
+  exploreRegion,
   getHealth,
   resolveAssetUrl,
   type Analysis,
@@ -146,6 +148,8 @@ export default function Home() {
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [aiScanning, setAiScanning] = useState(false);
+  const [aiMode, setAiMode] = useState<"scientific" | "opencv">("scientific");
   const [inputError, setInputError] = useState<string | null>(null);
   const [provider, setProvider] = useState<string | null>(null);
   const [show3d, setShow3d] = useState(false);
@@ -208,6 +212,7 @@ export default function Home() {
     setScanError(null);
     setAnalysis(null);
     setCandidate(null);
+    setAiMode("scientific");
     try {
       const result = await analyzeRegion(epochA, epochB, position.ra, position.dec, fov, CUTOUT_SIZE);
       setAnalysis(result);
@@ -216,6 +221,24 @@ export default function Home() {
       setScanError(error instanceof Error ? error.message : "The comparison failed.");
     } finally {
       setScanning(false);
+    }
+  };
+
+  const runAiScan = async () => {
+    if (!epochA || !epochB) return;
+    setAiScanning(true);
+    setScanError(null);
+    setAnalysis(null);
+    setCandidate(null);
+    setAiMode("opencv");
+    try {
+      const result = await exploreRegion(epochA, epochB, position.ra, position.dec, fov, CUTOUT_SIZE);
+      setAnalysis(result);
+      setCandidate(result.candidates[0] ?? null);
+    } catch (error) {
+      setScanError(error instanceof Error ? error.message : "The AI scan failed.");
+    } finally {
+      setAiScanning(false);
     }
   };
 
@@ -453,10 +476,18 @@ export default function Home() {
                   variant="contained"
                   color="secondary"
                   startIcon={scanning ? <CircularProgress size={16} color="inherit" /> : <Troubleshoot />}
-                  disabled={scanning || !epochA || !epochB || epochA === epochB}
+                  disabled={scanning || aiScanning || !epochA || !epochB || epochA === epochB}
                   onClick={runScan}
                 >
                   {scanning ? "Comparing…" : "Find changes"}
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={aiScanning ? <CircularProgress size={16} color="inherit" /> : <AutoAwesome />}
+                  disabled={scanning || aiScanning || !epochA || !epochB || epochA === epochB}
+                  onClick={runAiScan}
+                >
+                  {aiScanning ? "Scanning…" : "AI scan"}
                 </Button>
               </Stack>
               {epochA === epochB && (
@@ -472,6 +503,14 @@ export default function Home() {
 
               {analysis && (
                 <Box sx={{ mt: 3 }}>
+                  <Alert
+                    severity={aiMode === "opencv" ? "info" : "success"}
+                    sx={{ mb: 2 }}
+                  >
+                    {aiMode === "opencv"
+                      ? "AI scan: OpenCV visual-aid candidates on the rendered difference — unclassified, not the significance baseline."
+                      : "Statistical comparison: noise-normalized significance candidates (5σ threshold)."}
+                  </Alert>
                   <Grid container spacing={2}>
                     {[
                       { label: `A · ${frameDate(frameA)}`, url: frameA?.cutout_url ?? null },
