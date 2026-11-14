@@ -18,7 +18,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { Search, Troubleshoot, ZoomIn, ZoomOutMap } from "@mui/icons-material";
+import { Search, Troubleshoot, ZoomIn, ZoomOutMap, Download } from "@mui/icons-material";
 import { nasa } from "@/theme";
 import {
   analyzeRegion,
@@ -33,6 +33,7 @@ import {
 } from "@/services/api";
 import TimelinePlayer from "@/components/TimelinePlayer";
 import LightCurvePanel from "@/components/LightCurvePanel";
+import SpectrumPlot from "@/components/SpectrumPlot";
 
 const CUTOUT_SIZE = 256;
 const DEFAULT_RA = 269.454;
@@ -42,6 +43,24 @@ const frameDate = (frame: TimelineFrame | null | undefined) =>
   frame?.epoch
     ? new Date(frame.epoch).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     : "—";
+
+function downloadFile(filename: string, content: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function csv(rows: (string | number | null | undefined)[][]): string {
+  return rows
+    .map((row) => row.map((cell) => (cell == null ? "" : `"${String(cell).replace(/"/g, '""')}"`)).join(","))
+    .join("\n");
+}
 
 function Section({ title, number, lead, children }: { title: string; number: string; lead: string; children: React.ReactNode }) {
   return (
@@ -234,6 +253,44 @@ export default function ResearchView() {
     return [...bands].sort();
   }, [spectrum]);
 
+  const downloadLightCurve = () => {
+    const rows: (string | number | null | undefined)[][] = [
+      ["epoch", "observation_id", "band", "wavelength_um", "surface_brightness_MJy_sr"],
+      ...(spectrum?.points ?? [])
+        .filter((point) => point.surface_brightness > 0)
+        .map((point) => [point.epoch, point.observation_id, point.band, point.wavelength, point.surface_brightness]),
+    ];
+    downloadFile(`lightcurve_ra${position.ra.toFixed(2)}_dec${position.dec.toFixed(2)}.csv`, csv(rows), "text/csv");
+  };
+
+  const downloadCandidates = () => {
+    const rows: (string | number | null | undefined)[][] = [
+      ["candidate_id", "row", "column", "width", "height", "area", "score_sigma", "ra", "dec", "gaia_match", "interpretation"],
+      ...(analysis?.candidates ?? []).map((item) => [
+        item.candidate_id,
+        item.row,
+        item.column,
+        item.width,
+        item.height,
+        item.area,
+        item.score,
+        item.ra,
+        item.dec,
+        item.gaia_checked ? (item.gaia_match ? "known star" : "not in catalog") : null,
+        item.interpretation,
+      ]),
+    ];
+    downloadFile(`candidates_ra${position.ra.toFixed(2)}_dec${position.dec.toFixed(2)}.csv`, csv(rows), "text/csv");
+  };
+
+  const downloadTimeline = () => {
+    const rows: (string | number | null | undefined)[][] = [
+      ["observation_id", "epoch", "band", "wavelength_um", "source", "coverage"],
+      ...frames.map((frame) => [frame.observation_id, frame.epoch, frame.band, frame.wavelength, frame.source, frame.coverage]),
+    ];
+    downloadFile(`timeline_ra${position.ra.toFixed(2)}_dec${position.dec.toFixed(2)}.csv`, csv(rows), "text/csv");
+  };
+
   return (
     <Box>
       <Box sx={{ bgcolor: nasa.blue, color: "#fff", py: 1.5, borderTop: `3px solid ${nasa.red}` }}>
@@ -247,11 +304,24 @@ export default function ResearchView() {
                 Motion and variability analysis for a single sky position
               </Typography>
             </Box>
-            <Chip
-              label={`RA ${position.ra.toFixed(4)}° · Dec ${position.dec.toFixed(4)}°`}
-              size="small"
-              sx={{ bgcolor: "rgba(255,255,255,.14)", color: "#fff", fontFamily: "var(--font-nasa-mono), 'DM Mono', monospace" }}
-            />
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Chip
+                label={`RA ${position.ra.toFixed(4)}° · Dec ${position.dec.toFixed(4)}°`}
+                size="small"
+                sx={{ bgcolor: "rgba(255,255,255,.14)", color: "#fff", fontFamily: "var(--font-nasa-mono), 'DM Mono', monospace" }}
+              />
+              <Button
+                size="small"
+                variant="contained"
+                color="secondary"
+                startIcon={<Download />}
+                disabled={!spectrum || frames.length === 0}
+                onClick={downloadLightCurve}
+                sx={{ color: "#fff" }}
+              >
+                Download data
+              </Button>
+            </Stack>
           </Stack>
         </Container>
       </Box>
@@ -301,6 +371,21 @@ export default function ResearchView() {
               {inputError}
             </Alert>
           )}
+
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.5, flexWrap: "wrap" }}>
+            <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
+              Export:
+            </Typography>
+            <Button size="small" variant="outlined" disabled={frames.length === 0} onClick={downloadTimeline}>
+              Timeline (.csv)
+            </Button>
+            <Button size="small" variant="outlined" disabled={!spectrum || (spectrum?.points ?? []).length === 0} onClick={downloadLightCurve}>
+              Light curve (.csv)
+            </Button>
+            <Button size="small" variant="outlined" disabled={!analysis || analysis.candidates.length === 0} onClick={downloadCandidates}>
+              Candidates (.csv)
+            </Button>
+          </Stack>
         </Paper>
 
         <Grid container spacing={3}>
@@ -510,6 +595,17 @@ export default function ResearchView() {
                 ))}
               </Stack>
               <LightCurvePanel ra={position.ra} dec={position.dec} selectedBand={band} />
+            </Section>
+          </Grid>
+
+          {/* Section 4 — spectrum */}
+          <Grid size={{ xs: 12 }}>
+            <Section
+              number="4"
+              title="Spectrum"
+              lead="Surface brightness vs. wavelength, assembled across SPHEREx detectors. Each detector sees a different slice of 0.75–5 µm, so the points trace the source's spectral energy distribution."
+            >
+              <SpectrumPlot ra={position.ra} dec={position.dec} />
             </Section>
           </Grid>
         </Grid>

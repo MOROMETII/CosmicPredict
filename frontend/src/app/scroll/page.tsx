@@ -41,15 +41,14 @@ import {
   getGaiaOverlay,
   getMarks,
   getTimeline,
+  likeRegion,
   resolveAssetUrl,
-  saveRegion,
   type FeedItem,
   type GaiaOverlay,
   type TimelineFrame,
 } from "@/services/api";
 import { nasa } from "@/theme";
 import ScrollTutorial, { tutorialSeen } from "@/components/ScrollTutorial";
-import CommentSection from "@/components/CommentSection";
 
 const DOUBLE_TAP_MS = 300;
 const HOLD_MS = 280;
@@ -176,6 +175,8 @@ function ReelCard({
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [liked, setLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(item.likes ?? 0);
 
   const holdTimerRef = useRef<number | null>(null);
   const heldRef = useRef(false);
@@ -261,15 +262,23 @@ function ReelCard({
     [item, active, onFlagged],
   );
 
-  /** Double-tap: save (like) the region — Instagram-style heart burst. */
+  /** Like the region (double-tap or the heart button). */
+  const like = useCallback(() => {
+    if (liked) return;
+    setLiked(true);
+    setLikeCount((count) => count + 1);
+    likeRegion(item.region_key).catch(() => onToast("Could not like — is the backend running?"));
+  }, [liked, item.region_key, onToast]);
+
+  /** Double-tap: like the region — Instagram-style heart burst. */
   const quickSave = useCallback(
     (tapSpot: TapSpot) => {
       setSpot(tapSpot);
       setBurst(true);
       window.setTimeout(() => setBurst(false), 750);
-      saveRegion(item.region_key).catch(() => onToast("Could not save — is the backend running?"));
+      like();
     },
-    [item.region_key, onToast],
+    [like],
   );
 
   const onPointerDown = useCallback(() => {
@@ -502,17 +511,13 @@ function ReelCard({
             <Typography sx={{ color: "#7fb8ff", fontSize: 11, mt: 0.5, textShadow: "0 1px 4px #000" }}>
               #SPHEREx #infraredSky #spaceApps
             </Typography>
-            {(item.score ?? 0) > 0 && (
+            {(item.likes ?? 0) > 0 && (
               <Stack direction="row" spacing={0.75} sx={{ mt: 0.75 }}>
                 <Chip
                   size="small"
-                  label={`${item.score} points`}
+                  label={`${item.likes} like${item.likes === 1 ? "" : "s"}`}
                   sx={{ bgcolor: "rgba(255,183,77,.18)", color: "#ffb74d", fontSize: 10, height: 20 }}
                 />
-                {item.flags > 0 && <Chip size="small" label={`${item.flags} flag${item.flags === 1 ? "" : "s"}`} sx={{ bgcolor: "rgba(255,255,255,.1)", color: "#ffd890", fontSize: 10, height: 20 }} />}
-                {item.comments > 0 && <Chip size="small" label={`${item.comments} comment${item.comments === 1 ? "" : "s"}`} sx={{ bgcolor: "rgba(255,255,255,.1)", color: "#9ddcff", fontSize: 10, height: 20 }} />}
-                {item.gifs > 0 && <Chip size="small" label={`${item.gifs} gif${item.gifs === 1 ? "" : "s"}`} sx={{ bgcolor: "rgba(255,255,255,.1)", color: "#c9b8ff", fontSize: 10, height: 20 }} />}
-                {item.people > 0 && <Chip size="small" label={`${item.people} ${item.people === 1 ? "person" : "people"}`} sx={{ bgcolor: "rgba(255,255,255,.1)", color: "#9fe8c0", fontSize: 10, height: 20 }} />}
               </Stack>
             )}
           </Box>
@@ -537,6 +542,13 @@ function ReelCard({
               title="Replay speed — cycles 0.5×, 1×, 2×"
               active={speedIndex !== 1}
               onClick={() => setSpeedIndex((value) => (value + 1) % SPEEDS.length)}
+            />
+            <RailButton
+              icon={<Favorite sx={{ fontSize: 26 }} />}
+              label={likeCount > 0 ? String(likeCount) : "Like"}
+              title={liked ? "Liked" : "Like this region"}
+              active={liked}
+              onClick={like}
             />
             <RailButton
               icon={<BookmarkAdd sx={{ fontSize: 26 }} />}
@@ -658,27 +670,6 @@ function ReelCard({
             />
           </Stack>
         )}
-        </Box>
-
-        {/* Comment panel — always open, beside the sky image */}
-        <Box
-          onPointerDown={(event) => event.stopPropagation()}
-          onPointerUp={(event) => event.stopPropagation()}
-          sx={{
-            width: { xs: "100%", md: 360 },
-            height: { xs: "auto", md: "min(76dvh, calc(100vw - 380px))" },
-            maxHeight: { xs: 340, md: "none" },
-            borderRadius: 2,
-            border: "1px solid rgba(255,255,255,.16)",
-            bgcolor: "rgba(10,13,18,.96)",
-            p: 1.5,
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-            flexShrink: 0,
-          }}
-        >
-          <CommentSection regionKey={item.region_key} ra={item.ra} dec={item.dec} />
         </Box>
       </Box>
 
