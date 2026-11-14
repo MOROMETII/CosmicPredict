@@ -55,12 +55,23 @@ def list_comments(region_key: str) -> list[dict[str, Any]]:
     return sorted(comments, key=lambda comment: comment.get("created_at") or "", reverse=False)
 
 
-def add_comment(region_key: str, author: str | None, body: str) -> dict[str, Any]:
+def add_comment(
+    region_key: str,
+    author: str | None,
+    body: str,
+    *,
+    gif_url: str | None = None,
+    gif_still_url: str | None = None,
+    gif_title: str | None = None,
+) -> dict[str, Any]:
     comment = {
         "id": uuid.uuid4().hex[:12],
         "region_key": region_key,
         "author": (author or "").strip() or "Anonymous",
         "body": body.strip(),
+        "gif_url": gif_url,
+        "gif_still_url": gif_still_url,
+        "gif_title": gif_title,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     with _lock:
