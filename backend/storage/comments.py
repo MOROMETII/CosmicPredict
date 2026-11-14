@@ -55,6 +55,16 @@ def list_comments(region_key: str) -> list[dict[str, Any]]:
     return sorted(comments, key=lambda comment: comment.get("created_at") or "", reverse=False)
 
 
+def list_comments_all() -> list[dict[str, Any]]:
+    """Every comment across all regions (for scoring), in no particular order."""
+    with _lock:
+        regions = _read()
+    flattened: list[dict[str, Any]] = []
+    for comments in regions.values():
+        flattened.extend(comments)
+    return flattened
+
+
 def add_comment(
     region_key: str,
     author: str | None,
