@@ -78,10 +78,10 @@ export default function DiscoveryPanel({ candidate, pixelScaleArcsec }: Props) {
         {candidate.gaia_checked ? (
           candidate.gaia_match ? (
             <>
-        
-                <Chip size="small" label="KNOWN STAR" sx={{ mr: 1, bgcolor: "rgba(120,160,255,.2)", fontSize: 11 }} />
-                {candidate.interpretation}
-            
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Chip size="small" label="KNOWN STAR" sx={{ bgcolor: "rgba(120,160,255,.2)", fontSize: 11 }} />
+                <Typography variant="body2">{candidate.interpretation}</Typography>
+              </Stack>
               <Typography variant="caption" color="text.secondary">
                 Gaia DR3 {candidate.gaia_match.source_id}
                 {candidate.gaia_match.g_mag != null && ` · G=${candidate.gaia_match.g_mag.toFixed(1)}`}
@@ -91,11 +91,13 @@ export default function DiscoveryPanel({ candidate, pixelScaleArcsec }: Props) {
               </Typography>
             </>
           ) : (
-            <>
-              <Chip size="small" label="NOT IN CATALOG" sx={{ mr: 1, bgcolor: "rgba(255,180,80,.25)", fontSize: 11 }} />
-              {candidate.interpretation ??
-                "No catalogued Gaia DR3 star here — the change is not explained by the star catalog."}
-            </>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Chip size="small" label="NOT IN CATALOG" sx={{ bgcolor: "rgba(255,180,80,.25)", fontSize: 11 }} />
+              <Typography variant="body2">
+                {candidate.interpretation ??
+                  "No catalogued Gaia DR3 star here — the change is not explained by the star catalog."}
+              </Typography>
+            </Stack>
           )
         ) : (
           <Typography variant="body2" color="text.secondary">

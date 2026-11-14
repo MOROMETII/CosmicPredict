@@ -32,11 +32,24 @@ import numpy as np
 from astropy.io.votable import parse
 
 from backend import config
-from backend.http_util import http_get
+from backend.http_util import http_get, USER_AGENT
 
 SIA_COLLECTIONS = ("spherex_dr1", "spherex_qr3")
 SIA_BASE = "https://irsa.ipac.caltech.edu/SIA?COLLECTION={collection}"
 _LEDGER_NAME = "live_regions.json"
+_USER_AGENT = USER_AGENT
+# Bump when the fetch strategy changes so stale (incomplete) ledgers are
+# discarded and regions re-fetch under the new rules.
+_LEDGER_VERSION = 2
+
+# Transient HTTP statuses worth retrying with exponential backoff. IRSA's IBE
+# cutout server returns "503 Server busy, retry later" (with Retry-After) while
+# a cutout is generated on demand, so a single failure is not meaningful — retry
+# politely, growing the wait each attempt, before giving up.
+_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+_RETRY_BASE_DELAY = 5.0
+_RETRY_MAX_DELAY = 60.0
+_RETRY_ATTEMPTS = 5
 
 # Snap requested positions to a coarse grid so nearby queries share cutouts.
 _GRID_DEG = 0.02  # ~1.2 arcmin
@@ -70,16 +83,52 @@ def _read_ledger() -> dict[str, Any]:
     path = _ledger_path()
     if path.is_file():
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            ledger = json.loads(path.read_text(encoding="utf-8"))
+            if ledger.get("version") == _LEDGER_VERSION:
+                return ledger
         except (OSError, ValueError):
             pass
-    return {"regions": {}}
+    return {"version": _LEDGER_VERSION, "regions": {}}
 
 
 def _write_ledger(ledger: dict[str, Any]) -> None:
     path = _ledger_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(ledger, indent=1), encoding="utf-8")
+    path.write_text(json.dumps({**_ledger, "version": _LEDGER_VERSION}, indent=1), encoding="utf-8")
+
+
+def _open_with_retry(request: urllib.request.Request, *, timeout: float) -> Any:
+    """Open a request, retrying transient failures with polite backoff.
+
+    The wait grows each attempt but never shrinks below the server's Retry-After
+    hint, so a "Server busy" 503 is given progressively more time to clear.
+    """
+    last_error: Exception | None = None
+    for attempt in range(_RETRY_ATTEMPTS):
+        try:
+            return urllib.request.urlopen(request, timeout=timeout)
+        except urllib.error.HTTPError as error:
+            if error.code in _RETRYABLE_STATUS and attempt < _RETRY_ATTEMPTS - 1:
+                backoff = _RETRY_BASE_DELAY * (2 ** attempt)
+                retry_after = error.headers.get("Retry-After") if error.headers else None
+                try:
+                    wait = min(max(backoff, float(retry_after)), _RETRY_MAX_DELAY) if retry_after else min(backoff, _RETRY_MAX_DELAY)
+                except ValueError:
+                    wait = min(backoff, _RETRY_MAX_DELAY)
+                print(f"transient HTTP {error.code}; retrying in {wait:.1f}s")
+                time.sleep(wait)
+                last_error = error
+                continue
+            raise
+        except urllib.error.URLError as error:
+            if attempt < _RETRY_ATTEMPTS - 1:
+                wait = min(_RETRY_BASE_DELAY * (2 ** attempt), _RETRY_MAX_DELAY)
+                print(f"connection error {error}; retrying in {wait:.1f}s")
+                time.sleep(wait)
+                last_error = error
+                continue
+            raise
+    raise last_error  # type: ignore[misc]
 
 
 def _query_sia(ra: float, dec: float, radius_deg: float, timeout: float) -> list[dict[str, Any]]:
@@ -89,8 +138,10 @@ def _query_sia(ra: float, dec: float, radius_deg: float, timeout: float) -> list
             {"POS": f"CIRCLE {ra} {dec} {radius_deg}", "MAXREC": "2000"}
         )
         url = f"{SIA_BASE.format(collection=collection)}&{params}"
+        request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
         try:
-            payload = _http_get(url, timeout)
+            with _open_with_retry(request, timeout=timeout) as response:
+                payload = response.read()
             votable = parse(BytesIO(payload), verify="ignore")
             tables = list(votable.iter_tables())
             if not tables:
@@ -123,7 +174,13 @@ def _mjd_month(mjd: float) -> str:
 def _select_frames(
     records: list[dict[str, Any]], ra: float, dec: float, max_frames: int
 ) -> list[dict[str, Any]]:
-    """One well-centered record per month, in the band with the best month spread."""
+    """One well-centered record per (band, month), across every detector band.
+
+    SPHEREx re-visits a position in all six detectors each survey pass, so a
+    position is only "complete" when every band's months are represented. We
+    keep the best-centered exposure for each (band, month) pair, then thin to
+    ``max_frames`` with even spacing if the archive is exceptionally dense.
+    """
     usable = []
     for record in records:
         try:
@@ -143,18 +200,17 @@ def _select_frames(
             )
         except (KeyError, TypeError, ValueError):
             continue
-    by_band: dict[str, dict[str, list[dict[str, Any]]]] = {}
-    for item in usable:
-        by_band.setdefault(item["band"], {}).setdefault(item["month"], []).append(item)
-    if not by_band:
-        return []
-    band = max(by_band, key=lambda b: (len(by_band[b]), sum(len(v) for v in by_band[b].values())))
 
     def separation(item: dict[str, Any]) -> float:
         d_ra = (item["s_ra"] - ra) * np.cos(np.deg2rad(dec))
         return float(np.hypot(d_ra, item["s_dec"] - dec))
 
-    frames = [min(group, key=separation) for _, group in sorted(by_band[band].items())]
+    by_band_month: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for item in usable:
+        by_band_month.setdefault((item["band"], item["month"]), []).append(item)
+    if not by_band_month:
+        return []
+    frames = [min(group, key=separation) for _, group in sorted(by_band_month.items())]
     if len(frames) > max_frames:
         step = len(frames) / max_frames
         frames = [frames[int(index * step)] for index in range(max_frames)]
@@ -166,9 +222,9 @@ def fetch_region(
     dec: float,
     *,
     size_arcmin: float = 24.0,
-    max_frames: int = 8,
-    delay_seconds: float = 1.0,
-    timeout: float = 90.0,
+    max_frames: int = 48,
+    delay_seconds: float = 0.5,
+    timeout: float = 45.0,
 ) -> dict[str, Any]:
     """Download time-spread cutouts of (ra, dec) from IRSA into the local cache.
 
@@ -199,8 +255,10 @@ def fetch_region(
             downloaded.append(filename)
             continue
         cutout_url = f"{frame['url']}?center={ra_snap},{dec_snap}&size={size_arcmin}arcmin"
+        request = urllib.request.Request(cutout_url, headers={"User-Agent": _USER_AGENT})
         try:
-            payload = _http_get(cutout_url, timeout)
+            with _open_with_retry(request, timeout=timeout) as response:
+                payload = response.read()
         except Exception as error:  # noqa: BLE001 - skip failing frames, keep the rest
             print(f"live cutout download failed ({frame['month']}): {error}")
             continue

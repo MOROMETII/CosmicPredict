@@ -44,6 +44,7 @@ SUPABASE_URL: str | None = getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY: str | None = getenv("SUPABASE_SERVICE_ROLE_KEY")
 SUPABASE_BUCKET: str = getenv("SUPABASE_BUCKET", "spherex-images") or "spherex-images"
 SPHEREX_SIA_URL: str | None = getenv("SPHEREX_SIA_URL")
+GIPHY_API_KEY: str | None = getenv("GIPHY_API_KEY")
 JEPA_CHECKPOINT: Path = Path(getenv("JEPA_CHECKPOINT", "models/checkpoints/jepa.pt") or "models/checkpoints/jepa.pt")
 RAW_DIR: Path = Path(getenv("DATA_RAW_DIR", "data/raw") or "data/raw")
 SNAPSHOT_DIR: Path = Path(getenv("DATA_SNAPSHOT_DIR", "data/snapshots") or "data/snapshots")

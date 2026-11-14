@@ -152,6 +152,8 @@ class FeedItem(BaseModel):
     band: str | None = None
     n_frames: int
     region_key: str  # which cached region this tile belongs to
+    score: int = 0  # number of likes
+    likes: int = 0
 
 
 class FeedResponse(BaseModel):
@@ -172,6 +174,7 @@ class MarkCreateRequest(BaseModel):
     epoch: str | None = Field(default=None, max_length=64)
     note: str | None = Field(default=None, max_length=500)
     source: str = Field(default="scroll", max_length=32)
+    region_key: str | None = Field(default=None, max_length=64)
     # Fractional position of the tapped spot inside the displayed frame.
     x_frac: float | None = Field(default=None, ge=0.0, le=1.0)
     y_frac: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -190,6 +193,7 @@ class MarkResponse(BaseModel):
     epoch: str | None = None
     note: str | None = None
     source: str = "scroll"
+    region_key: str | None = None
     preview_url: str | None = None
     caveat: str = "A flag is a personal bookmark for review — not a detection or a confirmed anomaly."
 
@@ -197,6 +201,60 @@ class MarkResponse(BaseModel):
 class MarksResponse(BaseModel):
     status: str
     marks: list[MarkResponse] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
+
+
+class LikeCreateRequest(BaseModel):
+    """A like on a sky region."""
+
+    region_key: str = Field(..., max_length=64)
+
+
+class LikeResponse(BaseModel):
+    id: str
+    region_key: str
+    created_at: str
+
+
+class LikesResponse(BaseModel):
+    status: str
+    region_key: str
+    count: int
+
+
+class SurveyItem(BaseModel):
+    """One region's engagement ranking entry."""
+
+    region_key: str
+    ra: float
+    dec: float
+    score: int
+    likes: int
+    preview_url: str | None = None
+
+
+class SurveyResponse(BaseModel):
+    status: str
+    regions: list[SurveyItem] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
+
+
+class SkyMapItem(BaseModel):
+    """One observation shown on the homepage, for the sky-map pins."""
+
+    observation_id: str
+    ra: float
+    dec: float
+    epoch: datetime | None = None
+    band: str | None = None
+    wavelength: float | None = None
+    source: str = "cached"
+    preview_url: str | None = None
+
+
+class SkyMapResponse(BaseModel):
+    status: str
+    observations: list[SkyMapItem] = Field(default_factory=list)
     caveats: list[str] = Field(default_factory=list)
 
 
