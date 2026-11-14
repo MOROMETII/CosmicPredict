@@ -34,30 +34,59 @@ def wavelength_to_rgb(wavelength: float) -> np.ndarray:
     ).astype(np.float32)
 
 
-def _stretch(data: np.ndarray, valid: np.ndarray) -> np.ndarray:
-    """Apply a robust percentile + asinh stretch, returning values in [0, 1]."""
+# Pixels with no usable data (masked, or outside the exposure footprint) render
+# as a neutral dark gray, visually distinct from genuinely dark sky.
+_NO_DATA_RGB = np.array([0.055, 0.06, 0.075], dtype=np.float32)
+
+
+def compute_limits(data: np.ndarray, valid: np.ndarray) -> tuple[float, float]:
+    """Robust display limits (99.5% percentile interval) over valid pixels."""
     values = data[valid]
     if values.size == 0:
         raise ValueError("image has no valid pixels")
-    interval = PercentileInterval(99.5)
-    vmin, vmax = interval.get_limits(values)
+    vmin, vmax = PercentileInterval(99.5).get_limits(values)
     if not np.isfinite(vmin) or not np.isfinite(vmax) or vmax <= vmin:
         raise ValueError("image has no usable intensity range")
+    return float(vmin), float(vmax)
+
+
+def _stretch(
+    data: np.ndarray,
+    valid: np.ndarray,
+    vmin: float | None = None,
+    vmax: float | None = None,
+) -> np.ndarray:
+    """Percentile (or fixed) limits + asinh stretch, returning values in [0, 1].
+
+    Passing explicit ``vmin``/``vmax`` locks the brightness scale, so a series
+    of frames shares one scale and true brightness changes stay visible.
+    """
+    if vmin is None or vmax is None:
+        vmin, vmax = compute_limits(data, valid)
+    if vmax <= vmin:
+        raise ValueError("vmax must be greater than vmin")
     normalized = (np.clip(data, vmin, vmax) - vmin) / (vmax - vmin)
     stretch = AsinhStretch(a=0.1)
     return stretch(normalized)
 
 
-def render_mono(image: np.ndarray, valid_mask: np.ndarray, wavelength: float | None = None) -> np.ndarray:
+def render_mono(
+    image: np.ndarray,
+    valid_mask: np.ndarray,
+    wavelength: float | None = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
+) -> np.ndarray:
     """Render a single science image to an RGB uint8 array.
 
     Brightness encodes intensity (asinh-stretched); the hue encodes the
-    detector's infrared wavelength when available.
+    detector's infrared wavelength when available. Fixed ``vmin``/``vmax``
+    keep a frame series on one common brightness scale.
     """
-    stretched = _stretch(image, valid_mask)
+    stretched = _stretch(image, valid_mask, vmin, vmax)
     tint = wavelength_to_rgb(wavelength) if wavelength is not None else np.array([1.0, 1.0, 1.0], dtype=np.float32)
     rgb = np.clip(stretched[..., None] * tint[None, None, :], 0.0, 1.0)
-    rgb[~valid_mask] = 0.0
+    rgb[~valid_mask] = _NO_DATA_RGB
     return (rgb * 255.0).astype(np.uint8)
 
 
@@ -71,5 +100,5 @@ def render_difference(significance: np.ndarray, valid_mask: np.ndarray, symmetri
     blue = np.clip(-clipped, 0.0, 1.0)
     green = np.full_like(red, 0.03)
     rgb = np.stack([red, green, blue], axis=-1)
-    rgb[~valid_mask] = 0.0
+    rgb[~valid_mask] = _NO_DATA_RGB
     return (rgb * 255.0).astype(np.uint8)

@@ -27,6 +27,46 @@ class EpochsResponse(BaseModel):
     message: str | None = None
 
 
+class TimelineFrame(BaseModel):
+    observation_id: str
+    epoch: datetime | None
+    band: str | None
+    wavelength: float | None = None
+    cutout_url: str
+    source: str = "cached"
+    coverage: float | None = None  # fraction of the cutout on this exposure's detector
+
+
+class SpectrumPoint(BaseModel):
+    observation_id: str
+    epoch: datetime | None
+    band: str | None
+    wavelength: float
+    surface_brightness: float
+    unit: str = "MJy/sr"
+
+
+class SpectrumResponse(BaseModel):
+    status: str
+    ra: float
+    dec: float
+    points: list[SpectrumPoint] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
+    message: str | None = None
+
+
+class TimelineResponse(BaseModel):
+    status: str
+    ra: float
+    dec: float
+    fov_arcmin: float
+    band: str | None
+    available_bands: dict[str, int] = Field(default_factory=dict)
+    frames: list[TimelineFrame] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
+    message: str | None = None
+
+
 class AnalyzeRequest(BaseModel):
     context_epoch: str
     target_epoch: str
@@ -34,6 +74,17 @@ class AnalyzeRequest(BaseModel):
     row: int = Field(default=0, ge=0)
     column: int = Field(default=0, ge=0)
     size: int = Field(default=128, ge=8, le=1024, multiple_of=8)
+
+
+class AnalyzeRegionRequest(BaseModel):
+    """Compare two epochs on the shared north-up cutout grid at (ra, dec)."""
+
+    context_epoch: str
+    target_epoch: str
+    ra: float = Field(..., ge=0, lt=360)
+    dec: float = Field(..., ge=-90, le=90)
+    fov_arcmin: float = Field(default=15.0, ge=0.5, le=240.0)
+    size: int = Field(default=256, ge=8, le=512)
 
 
 class CandidateResponse(BaseModel):
