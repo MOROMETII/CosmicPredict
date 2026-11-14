@@ -1,4 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is the COSMIC PREDICT frontend: a Next.js dashboard for comparing cached SPHEREx observations.
+
+## Run the complete app locally
+
+Start the backend from the repository root in one terminal:
+
+```powershell
+python -m pip install -r backend\requirements.txt
+python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Start the frontend from `frontend\` in a second terminal:
+
+```powershell
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). The frontend uses
+`http://localhost:8000/api` by default. To point it at another backend, create
+`frontend\.env.local` with:
+
+```text
+NEXT_PUBLIC_API_URL=http://localhost:8000/api
+```
+
+The cached demo path works without a live IRSA connection. Use **Load epochs**
+to refresh metadata for a coordinate, select two timeline cards, and run
+**Find Changes**. The Aladin sky view loads its external survey layer in the
+browser; the cached observation metadata and difference analysis come from the
+FastAPI service.
+
+Cached FITS previews use an asinh false-color stretch for visibility; they are
+still derived views of the real science arrays, not RGB observations. The
+**Show difference** control displays a derived simplified absolute-difference
+preview and labels it accordingly. The fixture has no verified band/channel
+metadata, so the UI leaves that field explicitly unavailable rather than
+inventing a value.
+
+## Validate the frontend
+
+```powershell
+npm run lint
+npm run build
+```
 
 ## Getting Started
 
