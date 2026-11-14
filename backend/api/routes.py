@@ -6,7 +6,6 @@ import os
 import time
 from io import BytesIO
 from datetime import datetime
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +23,7 @@ from backend.astronomy.calibration import robust_normalize
 ROOT = Path(__file__).resolve().parents[2]
 CHECKPOINT = ROOT / "models" / "checkpoints" / "jepa.pt"
 
+RAW_DIR = ROOT / "data" / "raw"
 router = APIRouter(prefix="/api")
 
 
@@ -139,37 +139,6 @@ def _validate_pair(context_epoch: str, target_epoch: str) -> tuple[ObservationRe
     return context, target
 
 
-@lru_cache(maxsize=1)
-def _jepa_inference(checkpoint: str) -> JEPAInference:
-    return JEPAInference.from_checkpoint(checkpoint)
-
-
-def _jepa_status() -> dict[str, Any]:
-    checkpoint = _checkpoint_path()
-    if not checkpoint.is_file():
-        return {
-            "status": "unavailable",
-            "enabled": False,
-            "checkpoint": None,
-            "message": "No trained JEPA checkpoint is configured.",
-        }
-    try:
-        _jepa_inference(str(checkpoint.resolve()))
-    except (OSError, RuntimeError, ValueError, TypeError) as error:
-        return {
-            "status": "error",
-            "enabled": False,
-            "checkpoint": str(checkpoint.relative_to(ROOT)),
-            "message": f"Trained JEPA checkpoint could not be loaded: {error}",
-        }
-    return {
-        "status": "ready",
-        "enabled": True,
-        "checkpoint": str(checkpoint.relative_to(ROOT)),
-        "message": None,
-    }
-
-
 def _candidates_from_map(
     score_map: np.ndarray,
     *,
@@ -216,7 +185,6 @@ def health() -> dict[str, Any]:
         "status": "ok",
         "provider": "supabase" if storage.is_supabase_available() else "cached",
         "observation_count": len(_catalog()),
-        "jepa": _jepa_status(),
     }
 
 
@@ -293,73 +261,23 @@ def _analyze(request: AnalyzeRequest) -> AnalyzeResponse:
         f"&target_epoch={request.target_epoch}&row={request.row}"
         f"&column={request.column}&size={request.size}"
     )
-    if not request.run_jepa:
-        return AnalyzeResponse(
-            status="ok",
-            context_epoch=request.context_epoch,
-            target_epoch=request.target_epoch,
-            difference_score=difference_score,
-            difference_image_url=difference_image_url,
-            candidates=_candidates_from_map(
-                difference_map,
-                source="difference",
-                coordinate_space="image_patch_pixel",
-            ),
-            caveats=["Difference score is a simplified normalized pixel baseline."],
-        )
-    jepa_status = _jepa_status()
-    if not jepa_status["enabled"]:
-        return AnalyzeResponse(
-            status="jepa_unavailable",
-            context_epoch=request.context_epoch,
-            target_epoch=request.target_epoch,
-            difference_score=difference_score,
-            difference_image_url=difference_image_url,
-            candidates=_candidates_from_map(
-                difference_map,
-                source="difference",
-                coordinate_space="image_patch_pixel",
-            ),
-            jepa_status=jepa_status["status"],
-            caveats=["No trained JEPA checkpoint is configured."],
-            message=jepa_status["message"],
-        )
-    inference = _jepa_inference(str(_checkpoint_path().resolve()))
-    result = inference.run(context, target)
-    anomaly_map = None if result.anomaly_map is None else result.anomaly_map[0].tolist()
-    candidates = _candidates_from_map(
-        difference_map,
-        source="difference",
-        coordinate_space="image_patch_pixel",
-    )
-    if result.anomaly_map is not None:
-        candidates.extend(
-            _candidates_from_map(
-                result.anomaly_map[0],
-                source="jepa",
-                coordinate_space="latent_patch_grid",
-                minimum_area=1,
-            )
-        )
     return AnalyzeResponse(
-        status=result.status,
+        status="ok",
         context_epoch=request.context_epoch,
         target_epoch=request.target_epoch,
         difference_score=difference_score,
         difference_image_url=difference_image_url,
-        jepa_score=result.jepa_score,
-        score_kind=result.score_kind,
-        anomaly_map=anomaly_map,
-        jepa_status=jepa_status["status"],
-        candidates=candidates,
-        caveats=["JEPA score is experimental and is not a probability or confirmation."],
-        message=result.message,
+        candidates=_candidates_from_map(
+            difference_map,
+            source="difference",
+            coordinate_space="image_patch_pixel",
+        ),
+        caveats=["Difference score is a simplified normalized pixel baseline."],
     )
 
 
 @router.post("/diff", response_model=AnalyzeResponse)
 def difference(request: AnalyzeRequest) -> AnalyzeResponse:
-    request.run_jepa = False
     return _analyze(request)
 
 

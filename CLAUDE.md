@@ -8,7 +8,7 @@ The product's defining direction is a **hybrid scientific + AI workflow**:
 
 1. Real SPHEREx observations and reproducible astronomical image processing are the source of truth.
 2. Conventional difference imaging and source detection provide the baseline candidate detections.
-3. A JEPA-inspired predictive representation model is an experimental second signal that may help rank unusual regions.
+3. Conventional difference imaging and source detection provide the candidate signal.
 4. Optional image interpolation makes transitions easier to follow, but interpolated/generated frames are never scientific observations.
 
 **Product promise:** help users investigate what changed, what appears unexpected, and what deserves closer inspection. Do not claim that the application autonomously discovers or confirms new astronomical objects.
@@ -30,7 +30,7 @@ Treat the project specification in `aioverview.md` as the product baseline. Pres
 - FITS processing before browser display.
 - A small number of selected spectral bands and tile-sized sky regions rather than attempting full-sky, all-band processing.
 
-The agreed product plan extends that baseline with a JEPA-inspired anomaly signal, candidate explanation, and optional synthetic visual transitions. Keep these additions modular and optional.
+The agreed product plan extends that baseline with candidate explanation and optional synthetic visual transitions. Keep synthetic transitions separate from scientific analysis.
 
 ## Product requirements
 
@@ -44,7 +44,7 @@ The agreed product plan extends that baseline with a JEPA-inspired anomaly signa
 6. User runs **Find Changes**.
 7. The app displays a difference image and candidate-source overlays.
 8. User selects a candidate to inspect coordinates, epoch information, measurements/scores, quality caveats, and observation history where available.
-9. If enabled, the AI panel displays the JEPA-inspired score separately from the conventional detection score.
+9. Candidate panels display difference evidence and scientific caveats.
 10. If enabled, the transition view displays a clearly labelled interpolation between actual observations.
 
 ### MVP requirements — implement these before advanced AI
@@ -61,8 +61,6 @@ The agreed product plan extends that baseline with a JEPA-inspired anomaly signa
 
 ### Advanced requirements
 
-- JEPA-inspired latent feature encoder/predictor and spatial anomaly map.
-- Combined candidate ranking that preserves the individual component scores.
 - Discovery detail panel explaining why a candidate was flagged.
 - Optional optical-flow or diffusion-based interpolation.
 - Shareable view URL and responsive layout, if time permits.
@@ -82,7 +80,7 @@ These rules are mandatory.
 9. Never infer physical motion from a simple residual alone. Motion candidates require position measurements across epochs and appropriate checks.
 10. Interpolated or generated frames are **visual aids only**. Label them `Interpolated / synthetic — not an observation` and keep them out of detection, measurement, and evidence pipelines.
 11. Keep uncertainty and quality limitations visible in candidate details.
-12. Do not claim JEPA improves detection unless an evaluation against a baseline supports that claim.
+12. Do not claim a candidate is confirmed without independent validation.
 
 ## Data strategy
 
@@ -146,10 +144,6 @@ Use a three-layer architecture:
 - `calibration`: normalization and compatible image preparation.
 - `difference`: difference image and uncertainty handling.
 - `source_detection`: connected components and candidate properties.
-- `encoder`: feature extraction.
-- `predictor`: latent prediction.
-- `anomaly_score`: spatial and candidate-level AI scores.
-- `inference`: orchestrate AI model execution.
 - `discovery_service`: combine outputs and prepare user-facing details.
 
 Do not let frontend components call IRSA directly.
@@ -167,7 +161,7 @@ Keep API contracts stable between live and mock providers. The initial API surfa
 - `GET /api/objects/{id}/history`
   - Return available observations/measurements for a candidate/source when such a history exists.
 - `POST /api/analyze`
-  - Optionally run conventional and JEPA-inspired analysis.
+  - Run conventional difference analysis.
 - `GET /api/health`
   - Return service health and active data-provider mode.
 
@@ -177,7 +171,6 @@ A candidate response should keep its evidence explicit. Suggested fields:
 - epoch A and epoch B identifiers/timestamps
 - band/channel
 - difference significance/score
-- JEPA anomaly score, nullable when disabled/unavailable
 - candidate morphology/area and measurements when computed
 - quality flags and caveats
 - source provenance
@@ -202,28 +195,6 @@ For each pair:
 
 The simple NumPy subtraction approach in the project brief is acceptable as an early prototype only when clearly identified as simplified. Keep the implementation replaceable by a more rigorous method or a standard tool such as HOTPANTS if available.
 
-## JEPA-inspired AI requirements
-
-The AI system is an additional analysis signal, not the authority for scientific claims.
-
-Initial implementation direction:
-- Use PyTorch.
-- Start with a frozen pretrained visual encoder only if its license, input requirements, and suitability are checked.
-- Because natural-image/video pretrained models may not represent astronomical infrared imagery well, support a small domain-specific encoder or feature baseline.
-- Train a lightweight predictor to predict target latent features from earlier observation features.
-- Use held-out observations/regions for evaluation; avoid leakage between train and evaluation samples.
-- Produce a spatial latent prediction-error map and/or candidate-level score.
-- Keep model inference optional and bounded so the app remains usable without a GPU/model checkpoint.
-- Return `null`/`unavailable` rather than fabricated AI scores if the model is not loaded.
-
-Use accurate language: call the feature **JEPA-inspired** unless the implementation genuinely follows a JEPA architecture/training setup. Do not claim that simply running V-JEPA features constitutes training a SPHEREx JEPA model.
-
-Candidate ranking may combine normalized conventional and AI signals, but:
-- Keep component scores visible.
-- Document weights and calibration.
-- Do not label a combined score as a probability unless calibrated as one.
-- Compare against the difference-only baseline before claiming improvement.
-
 ## Visual interpolation requirements
 
 Priority order:
@@ -245,7 +216,6 @@ Use clear, restrained scientific language:
 - `Epoch` for observation time/visit.
 - `Difference image` for subtraction output.
 - `Candidate` or `candidate anomaly` for unconfirmed detections.
-- `JEPA-inspired score` for the latent prediction signal.
 - `Interpolated preview` for generated transitions.
 
 The UI should make it obvious:
@@ -263,9 +233,8 @@ The UI should make it obvious:
 4. Build the frontend against the stable API contract.
 5. Integrate live IRSA access behind the provider abstraction.
 6. Implement blink comparison before advanced subtraction.
-7. Implement a conventional difference-detection baseline before JEPA.
-8. Add JEPA as optional analysis after the baseline works.
-9. Add interpolation last.
+7. Keep conventional difference detection as the sole analysis baseline.
+8. Add interpolation last.
 10. Keep the application demoable offline using cached data.
 
 Do not rewrite the stack or add infrastructure without a concrete need. Prefer filesystem caching and SQLite over Redis or distributed services for the hackathon MVP.
@@ -327,4 +296,4 @@ The MVP is ready when a user can:
 - understand the provenance and limitations,
 - complete the demo without relying on live IRSA access.
 
-The hybrid AI milestone is ready when the JEPA-inspired analysis can run optionally, return reproducible scores/maps, and be evaluated against the conventional baseline without changing the core user journey.
+The extended milestone is ready when difference analysis is reproducible, quality-aware, and supported by verified multi-epoch data.

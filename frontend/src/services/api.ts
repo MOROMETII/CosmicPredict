@@ -29,11 +29,7 @@ export type Analysis = {
   context_epoch: string;
   target_epoch: string;
   difference_score: number | null;
-  jepa_score: number | null;
-  score_kind: string | null;
-  anomaly_map: number[][] | null;
   difference_image_url: string | null;
-  jepa_status: string;
   candidates: Candidate[];
   caveats: string[];
   message: string | null;
@@ -75,7 +71,6 @@ export async function getImages(): Promise<Observation[]> {
 export async function analyzePair(
   contextEpoch: string,
   targetEpoch: string,
-  runJepa = false,
 ): Promise<Analysis> {
   return request<Analysis>("/analyze", {
     method: "POST",
@@ -85,7 +80,6 @@ export async function analyzePair(
       row: 0,
       column: 0,
       size: 128,
-      run_jepa: runJepa,
     }),
   });
 }
