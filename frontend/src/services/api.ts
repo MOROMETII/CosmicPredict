@@ -2,6 +2,7 @@ export type Observation = {
   observation_id: string;
   epoch: string | null;
   band: string | null;
+  wavelength: number | null;
   ra: number | null;
   dec: number | null;
   source: "cached" | "live" | string;
@@ -204,6 +205,8 @@ export type FeedItem = {
   band: string | null;
   n_frames: number;
   region_key: string;
+  score: number;
+  likes: number;
 };
 
 export type Feed = {
@@ -239,6 +242,7 @@ export type MarkCreate = {
   epoch?: string | null;
   note?: string | null;
   source?: string;
+  region_key?: string | null;
   x_frac?: number | null;
   y_frac?: number | null;
 };
@@ -255,6 +259,60 @@ export async function getMarks(): Promise<{ status: string; marks: Mark[] }> {
 /** Save a "this looks suspicious" flag; a tapped spot is converted to sky coordinates server-side. */
 export async function createMark(payload: MarkCreate): Promise<Mark> {
   return request<Mark>("/marks", { method: "POST", body: JSON.stringify(payload) });
+}
+
+/** Like a sky region. */
+export async function likeRegion(regionKey: string): Promise<{ id: string; region_key: string; created_at: string }> {
+  return request<{ id: string; region_key: string; created_at: string }>("/likes", {
+    method: "POST",
+    body: JSON.stringify({ region_key: regionKey }),
+  });
+}
+
+export async function getLikeCount(regionKey: string): Promise<{ status: string; region_key: string; count: number }> {
+  return request<{ status: string; region_key: string; count: number }>(`/likes?region_key=${encodeURIComponent(regionKey)}`);
+}
+
+export type SurveyItem = {
+  region_key: string;
+  ra: number;
+  dec: number;
+  score: number;
+  likes: number;
+  preview_url: string | null;
+};
+
+export type Survey = {
+  status: string;
+  regions: SurveyItem[];
+  caveats: string[];
+};
+
+/** Engagement leaderboard: every interacted region, ranked by score. */
+export async function getSurvey(): Promise<Survey> {
+  return request<Survey>("/survey");
+}
+
+export type SkyMapItem = {
+  observation_id: string;
+  ra: number;
+  dec: number;
+  epoch: string | null;
+  band: string | null;
+  wavelength: number | null;
+  source: string;
+  preview_url: string | null;
+};
+
+export type SkyMap = {
+  status: string;
+  observations: SkyMapItem[];
+  caveats: string[];
+};
+
+/** Coordinates + previews for every homepage observation, for the sky map. */
+export async function getSkyMap(): Promise<SkyMap> {
+  return request<SkyMap>("/skymap");
 }
 
 export async function deleteMark(id: string): Promise<void> {
@@ -276,6 +334,54 @@ export async function analyzeRegion(
   size = 256,
 ): Promise<Analysis> {
   return request<Analysis>("/analyze_region", {
+    method: "POST",
+    body: JSON.stringify({
+      context_epoch: contextEpoch,
+      target_epoch: targetEpoch,
+      ra,
+      dec,
+      fov_arcmin: fov,
+      size,
+    }),
+  });
+}
+
+export type PatchCenter = { ra: number; dec: number; fov_arcmin: number };
+
+/** Map a fractional image rectangle (0..1) to the sky center + FOV of that patch. */
+export async function patchCenter(
+  ra: number,
+  dec: number,
+  fov: number,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  size = 256,
+): Promise<PatchCenter> {
+  const params = new URLSearchParams({
+    ra: String(ra),
+    dec: String(dec),
+    fov: String(fov),
+    size: String(size),
+    x0: String(x0),
+    y0: String(y0),
+    x1: String(x1),
+    y1: String(y1),
+  });
+  return request<PatchCenter>(`/patch_center?${params.toString()}`);
+}
+
+/** OpenCV change detection on the rendered difference image (visual aid, not the significance baseline). */
+export async function exploreRegion(
+  contextEpoch: string,
+  targetEpoch: string,
+  ra: number,
+  dec: number,
+  fov = 15,
+  size = 256,
+): Promise<Analysis> {
+  return request<Analysis>("/explore_region", {
     method: "POST",
     body: JSON.stringify({
       context_epoch: contextEpoch,

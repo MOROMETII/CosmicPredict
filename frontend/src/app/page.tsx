@@ -24,6 +24,7 @@ import {
 } from "@mui/material";
 import { useColorScheme } from "@mui/material/styles";
 import {
+  AutoAwesome,
   Bookmarks,
   DarkMode,
   ExpandLess,
@@ -37,6 +38,7 @@ import {
 import { nasa } from "@/theme";
 import {
   analyzeRegion,
+  exploreRegion,
   getHealth,
   resolveAssetUrl,
   type Analysis,
@@ -64,22 +66,30 @@ const toObservation = (frame: TimelineFrame): Observation => ({
   observation_id: frame.observation_id,
   epoch: frame.epoch,
   band: frame.band,
+  wavelength: frame.wavelength,
   ra: null,
   dec: null,
   source: frame.source,
   provenance: {},
-  image_url: `/api/images/${frame.observation_id}/preview`,
+  // Use the north-up aligned cutout (same sky grid for both epochs), not the
+  // full-detector preview, so the two frames actually overlay for the 3-D view.
+  image_url: frame.cutout_url,
   asset_status: "preview_available",
 });
 
 /** The app's own mark — an orbit sweep. (Not an agency logo.) */
 function AppMark() {
   return (
-    <Box component="svg" viewBox="0 0 40 40" sx={{ width: 34, height: 34, flexShrink: 0 }} aria-hidden>
-      <circle cx="20" cy="20" r="18" fill="none" stroke="#e4e9f1" strokeWidth="2" />
-      <ellipse cx="20" cy="20" rx="17" ry="6.5" fill="none" stroke={nasa.red} strokeWidth="2" transform="rotate(-18 20 20)" />
-      <circle cx="20" cy="20" r="4.5" fill="#e4e9f1" />
-      <circle cx="33.5" cy="13.5" r="2.4" fill={nasa.red} />
+    <Box
+      component="svg"
+      viewBox="0 0 40 40"
+      sx={{ width: 34, height: 34, flexShrink: 0, "& .mark-blue": { stroke: "primary.main", fill: "primary.main" } }}
+      aria-hidden
+    >
+      <circle className="mark-blue" cx="20" cy="20" r="18" fill="none" strokeWidth="2.4" />
+      <ellipse cx="20" cy="20" rx="17" ry="6.5" fill="none" stroke={nasa.red} strokeWidth="2.4" transform="rotate(-18 20 20)" />
+      <circle className="mark-blue" cx="20" cy="20" r="4.5" />
+      <circle cx="33.5" cy="13.5" r="2.6" fill={nasa.red} />
     </Box>
   );
 }
@@ -98,7 +108,7 @@ function ModeToggle() {
   const dark = mode === "dark";
   return (
     <Tooltip title={dark ? "Switch to light mode" : "Switch to dark mode"}>
-      <IconButton onClick={() => setMode(dark ? "light" : "dark")} sx={{ color: "#e4e9f1" }}>
+      <IconButton onClick={() => setMode(dark ? "light" : "dark")} sx={{ color: "text.secondary" }}>
         {dark ? <LightMode /> : <DarkMode />}
       </IconButton>
     </Tooltip>
@@ -145,6 +155,8 @@ export default function Home() {
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [aiScanning, setAiScanning] = useState(false);
+  const [aiMode, setAiMode] = useState<"scientific" | "opencv">("scientific");
   const [inputError, setInputError] = useState<string | null>(null);
   const [provider, setProvider] = useState<string | null>(null);
   const [show3d, setShow3d] = useState(false);
@@ -207,6 +219,7 @@ export default function Home() {
     setScanError(null);
     setAnalysis(null);
     setCandidate(null);
+    setAiMode("scientific");
     try {
       const result = await analyzeRegion(epochA, epochB, position.ra, position.dec, fov, CUTOUT_SIZE);
       setAnalysis(result);
@@ -218,26 +231,53 @@ export default function Home() {
     }
   };
 
+  const runAiScan = async () => {
+    if (!epochA || !epochB) return;
+    setAiScanning(true);
+    setScanError(null);
+    setAnalysis(null);
+    setCandidate(null);
+    setAiMode("opencv");
+    try {
+      const result = await exploreRegion(epochA, epochB, position.ra, position.dec, fov, CUTOUT_SIZE);
+      setAnalysis(result);
+      setCandidate(result.candidates[0] ?? null);
+    } catch (error) {
+      setScanError(error instanceof Error ? error.message : "The AI scan failed.");
+    } finally {
+      setAiScanning(false);
+    }
+  };
+
   return (
     <Box>
       {/* Honesty banner — this is an independent entry built on public data. */}
-      <Box sx={{ bgcolor: "#000", color: "#9aa4b2", py: 0.75, fontSize: 13, textAlign: "center", px: 2 }}>
+      <Box sx={{ bgcolor: nasa.blue, color: "#dbe4f5", py: 0.75, fontSize: 13, textAlign: "center", px: 2 }}>
         Built for the NASA Space Apps Challenge 2026 using public SPHEREx data from NASA/IPAC IRSA ·
         an independent entry, not an official NASA product
       </Box>
 
-      {/* Header — near-black chrome */}
-      <Box sx={{ bgcolor: nasa.black, color: "#fff", py: 2, borderBottom: `3px solid ${nasa.red}` }}>
+      {/* Header — white bar with the NASA red accent line */}
+      <Box
+        sx={(theme) => ({
+          bgcolor: theme.vars ? theme.vars.palette.background.paper : "background.paper",
+          color: "text.primary",
+          py: 1.5,
+          borderTop: `3px solid ${nasa.red}`,
+          borderBottom: "1px solid",
+          borderColor: "divider",
+        })}
+      >
         <Container maxWidth="lg">
           <Stack direction="row" justifyContent="space-between" alignItems="center">
             <Stack direction="row" spacing={1.5} alignItems="center">
               <AppMark />
               <Box>
-                <Typography variant="h5" sx={{ letterSpacing: "0.04em", lineHeight: 1.1 }}>
+                <Typography variant="h5" sx={{ letterSpacing: "0.02em", lineHeight: 1.1, color: "text.primary" }}>
                   COSMIC PREDICT
                 </Typography>
-                <Typography variant="body2" sx={{ color: "#9aa4b2" }}>
-                  SPHEREx Time-Domain Explorer — watch the infrared sky change
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                  SPHEREx Time-Domain Explorer
                 </Typography>
               </Box>
             </Stack>
@@ -246,7 +286,7 @@ export default function Home() {
                 <IconButton
                   component={NextLink}
                   href="/scroll"
-                  sx={{ color: "#e4e9f1", display: { xs: "inline-flex", sm: "none" } }}
+                  sx={{ color: "text.secondary", display: { xs: "inline-flex", sm: "none" } }}
                   aria-label="Sky Scroll"
                 >
                   <Slideshow />
@@ -257,20 +297,38 @@ export default function Home() {
                   component={NextLink}
                   href="/scroll"
                   startIcon={<Slideshow />}
-                  sx={{ color: "#e4e9f1", display: { xs: "none", sm: "inline-flex" } }}
+                  sx={{ color: "text.primary", display: { xs: "none", sm: "inline-flex" } }}
                 >
                   Sky Scroll
                 </Button>
               </Tooltip>
+              <Tooltip title="Discover — explore real observations pinned across the sky">
+                <Button
+                  component={NextLink}
+                  href="/discover"
+                  sx={{ color: "text.primary", display: { xs: "none", md: "inline-flex" } }}
+                >
+                  Discover
+                </Button>
+              </Tooltip>
+              <Tooltip title="Research view — motion and variability analysis">
+                <Button
+                  component={NextLink}
+                  href="/detailed"
+                  sx={{ color: "text.primary", display: { xs: "none", md: "inline-flex" } }}
+                >
+                  Research
+                </Button>
+              </Tooltip>
               <Tooltip title="My flags — everything you marked for review">
-                <IconButton component={NextLink} href="/flags" sx={{ color: "#ffb74d" }} aria-label="My flags">
+                <IconButton component={NextLink} href="/flags" sx={{ color: "primary.main" }} aria-label="My flags">
                   <Bookmarks />
                 </IconButton>
               </Tooltip>
               <Chip
                 label={provider ? `Data: ${provider === "supabase" ? "team archive" : "local cache"}` : "Backend offline"}
                 size="small"
-                sx={{ bgcolor: provider ? "rgba(255,255,255,.14)" : nasa.red, color: "#fff", display: { xs: "none", sm: "inline-flex" } }}
+                sx={{ bgcolor: provider ? "action.selected" : nasa.red, color: provider ? "text.primary" : "#fff", display: { xs: "none", sm: "inline-flex" } }}
               />
               <ModeToggle />
             </Stack>
@@ -289,40 +347,21 @@ export default function Home() {
       >
         <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
           <Grid container spacing={4} alignItems="center">
-            <Grid size={{ xs: 12, md: 7 }}>
+            <Grid size={{ xs: 12 }}>
+              <Typography
+                variant="overline"
+                sx={{ color: nasa.red, letterSpacing: "0.12em", fontWeight: 700, lineHeight: 1, display: "block", mb: 1 }}
+              >
+                SPHEREx Time-Domain Explorer
+              </Typography>
               <Typography variant="h3" sx={{ fontSize: { xs: 28, md: 38 }, mb: 1.5 }}>
                 The sky is not still.
               </Typography>
-              <Typography variant="body1" sx={{ color: "text.secondary", mb: 1.5 }}>
-                Since 2025, NASA&apos;s SPHEREx space telescope has photographed the <em>entire sky</em> every
-                six months in 102 shades of infrared light. Nearby stars drift, asteroids race by, and
-                stars pulse in brightness — but these changes only reveal themselves when you compare
-                pictures taken months apart. Pluto was discovered in exactly this way, by flipping
-                between two photographs until one dot jumped.
+              <Typography variant="body1" sx={{ color: "text.secondary", maxWidth: 720 }}>
+                Compare real SPHEREx observations of any spot on the sky across dates, blink between
+                them, and run a change detector to flag things that moved or changed in brightness —
+                whatever it flags is a candidate for review, not a confirmed discovery.
               </Typography>
-              <Typography variant="body1" sx={{ color: "text.secondary" }}>
-                This tool lets anyone replay real SPHEREx observations of any spot on the sky like a
-                short film, flip between dates, and run a statistical change detector. Whatever it
-                flags is a <strong>candidate</strong> for human review — not a confirmed discovery.
-              </Typography>
-            </Grid>
-            <Grid size={{ xs: 12, md: 5 }}>
-              <Stack spacing={1.5}>
-                {[
-                  ["102", "infrared wavelength bands, 0.75–5 µm"],
-                  ["6 months", "to map the complete sky, every time"],
-                  ["1 billion+", "objects imaged — far too many for experts alone"],
-                ].map(([stat, caption]) => (
-                  <Paper key={stat} sx={{ p: 2, display: "flex", alignItems: "baseline", gap: 1.5 }}>
-                    <Typography sx={{ fontWeight: 800, fontSize: 22, color: "primary.main", minWidth: 110 }}>
-                      {stat}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {caption}
-                    </Typography>
-                  </Paper>
-                ))}
-              </Stack>
             </Grid>
           </Grid>
         </Container>
@@ -452,10 +491,18 @@ export default function Home() {
                   variant="contained"
                   color="secondary"
                   startIcon={scanning ? <CircularProgress size={16} color="inherit" /> : <Troubleshoot />}
-                  disabled={scanning || !epochA || !epochB || epochA === epochB}
+                  disabled={scanning || aiScanning || !epochA || !epochB || epochA === epochB}
                   onClick={runScan}
                 >
                   {scanning ? "Comparing…" : "Find changes"}
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={aiScanning ? <CircularProgress size={16} color="inherit" /> : <AutoAwesome />}
+                  disabled={scanning || aiScanning || !epochA || !epochB || epochA === epochB}
+                  onClick={runAiScan}
+                >
+                  {aiScanning ? "Scanning…" : "AI scan"}
                 </Button>
               </Stack>
               {epochA === epochB && (
@@ -471,6 +518,14 @@ export default function Home() {
 
               {analysis && (
                 <Box sx={{ mt: 3 }}>
+                  <Alert
+                    severity={aiMode === "opencv" ? "info" : "success"}
+                    sx={{ mb: 2 }}
+                  >
+                    {aiMode === "opencv"
+                      ? "AI scan: OpenCV visual-aid candidates on the rendered difference — unclassified, not the significance baseline."
+                      : "Statistical comparison: noise-normalized significance candidates (5σ threshold)."}
+                  </Alert>
                   <Grid container spacing={2}>
                     {[
                       { label: `A · ${frameDate(frameA)}`, url: frameA?.cutout_url ?? null },
@@ -513,13 +568,11 @@ export default function Home() {
                                 top: `${(item.row / CUTOUT_SIZE) * 100}%`,
                                 width: `${Math.max((item.width / CUTOUT_SIZE) * 100, 4)}%`,
                                 height: `${Math.max((item.height / CUTOUT_SIZE) * 100, 4)}%`,
-                                border: selected ? "3px solid #00e5ff" : "1.5px solid rgba(255,255,255,.55)",
-                                boxShadow: selected
-                                  ? "0 0 0 2px rgba(0,229,255,.45), 0 0 16px 3px rgba(0,229,255,.65)"
-                                  : "none",
+                                border: selected ? `3px solid ${nasa.red}` : "1.5px solid rgba(255,255,255,.55)",
+                                boxShadow: selected ? `0 0 0 2px rgba(246,65,55,.35)` : "none",
                                 zIndex: selected ? 2 : 1,
                                 cursor: "pointer",
-                                borderRadius: "3px",
+                                borderRadius: "2px",
                                 transition: "box-shadow .15s, border .15s",
                               }}
                             />
@@ -527,7 +580,7 @@ export default function Home() {
                         })}
                       </Box>
                       {candidate && (
-                        <Typography variant="caption" sx={{ color: "#00bcd4", fontWeight: 700 }}>
+                        <Typography variant="caption" sx={{ color: nasa.red, fontWeight: 700 }}>
                           ◉ {candidate.candidate_id} highlighted
                         </Typography>
                       )}
@@ -541,8 +594,8 @@ export default function Home() {
                       </Typography>
                       {analysis.candidates.length === 0 ? (
                         <Typography variant="body2" color="text.secondary">
-                          No significant changes between these two dates — the sky held still here, at
-                          least above the noise level.
+                          No significant changes between these two dates — the brightness was stable
+                          within the noise level.
                         </Typography>
                       ) : (
                         <Stack spacing={0.5}>
@@ -622,10 +675,11 @@ export default function Home() {
         <Paper sx={{ p: { xs: 2, md: 3 }, mb: 3 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
             <Box>
-              <Typography variant="h6">Experimental: 3-D brightness relief</Typography>
+              <Typography variant="h6">Experimental: 3-D star field</Typography>
               <Typography variant="body2" color="text.secondary">
-                The two full detector images as a landscape where height is brightness — a visual aid,
-                not a measurement. The slider shows a synthetic blend, never a real observation.
+                Real sources detected in the aligned SPHEREx cutouts, placed at their true sky
+                positions and colored by the image&apos;s infrared-wavelength tint. Depth is a visual aid
+                (brightness → parallax), not a physical distance. WASD to move, drag to look.
               </Typography>
             </Box>
             <Button endIcon={show3d ? <ExpandLess /> : <ExpandMore />} onClick={() => setShow3d((value) => !value)}>
@@ -642,7 +696,7 @@ export default function Home() {
               />
               <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 1 }}>
                 <Typography variant="caption" sx={{ minWidth: 110 }} color="text.secondary">
-                  Synthetic blend A→B
+                  Crossfade A to B
                 </Typography>
                 <Slider size="small" value={morph} onChange={(_, value) => setMorph(value as number)} sx={{ maxWidth: 320 }} />
               </Stack>
@@ -657,11 +711,11 @@ export default function Home() {
       </Container>
 
       {/* Footer — near-black chrome */}
-      <Box sx={{ bgcolor: nasa.black, color: "#9aa4b2", py: 4, mt: 2 }}>
+      <Box sx={{ bgcolor: nasa.blue, color: "#c7d3ec", py: 4, mt: 2 }}>
         <Container maxWidth="lg">
           <Grid container spacing={3}>
             <Grid size={{ xs: 12, md: 4 }}>
-              <Typography sx={{ color: "#fff", fontWeight: 700, mb: 1 }}>Data & provenance</Typography>
+              <Typography sx={{ color: "#ffffff", fontWeight: 700, mb: 1 }}>Data & provenance</Typography>
               <Typography variant="body2">
                 All images are Level-2 calibrated SPHEREx observations retrieved from the NASA/IPAC
                 Infrared Science Archive (IRSA). Every displayed frame keeps a link to its archive
@@ -670,7 +724,7 @@ export default function Home() {
               </Typography>
             </Grid>
             <Grid size={{ xs: 12, md: 4 }}>
-              <Typography sx={{ color: "#fff", fontWeight: 700, mb: 1 }}>Glossary</Typography>
+              <Typography sx={{ color: "#ffffff", fontWeight: 700, mb: 1 }}>Glossary</Typography>
               <Typography variant="body2">
                 <strong>Epoch</strong> — the date of one observation · <strong>Detector band</strong> —
                 one of six infrared cameras · <strong>Candidate</strong> — an unconfirmed region where
@@ -678,9 +732,9 @@ export default function Home() {
               </Typography>
             </Grid>
             <Grid size={{ xs: 12, md: 4 }}>
-              <Typography sx={{ color: "#fff", fontWeight: 700, mb: 1 }}>NASA & partner resources</Typography>
+              <Typography sx={{ color: "#ffffff", fontWeight: 700, mb: 1 }}>NASA & partner resources</Typography>
               <Typography variant="body2" component="div">
-                <Stack spacing={0.5} sx={{ "& a": { color: "#9fc3ef" } }}>
+                <Stack spacing={0.5} sx={{ "& a": { color: "#a9c7f5" } }}>
                   <Link href="https://www.spaceappschallenge.org/2026/challenges/planet-x-and-spherex/?tab=resources" target="_blank" rel="noopener">
                     Space Apps challenge: Planet X and SPHEREx
                   </Link>
@@ -709,8 +763,8 @@ export default function Home() {
               </Typography>
             </Grid>
           </Grid>
-          <Divider sx={{ my: 2, borderColor: "rgba(255,255,255,.15)" }} />
-          <Typography variant="caption">
+          <Divider sx={{ my: 2, borderColor: "rgba(255,255,255,.25)" }} />
+          <Typography variant="caption" sx={{ color: "#b6c4e0" }}>
             COSMIC PREDICT · NASA Space Apps Challenge 2026 entry · independent project, not affiliated
             with or endorsed by NASA · SPHEREx data courtesy NASA/JPL-Caltech/IPAC-IRSA
           </Typography>

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import time
+import urllib.parse
+import urllib.request
 from io import BytesIO
 from datetime import datetime
 from typing import Any
@@ -24,6 +27,13 @@ from backend.api.schemas import (
     GaiaMatchResponse,
     GaiaOverlayResponse,
     GaiaSourceResponse,
+    LikeCreateRequest,
+    LikeResponse,
+    LikesResponse,
+    SkyMapItem,
+    SkyMapResponse,
+    SurveyItem,
+    SurveyResponse,
     MarkCreateRequest,
     MarkResponse,
     MarksResponse,
@@ -35,7 +45,11 @@ from backend.api.schemas import (
 )
 from backend.astronomy import cutout as cutout_module
 from backend.astronomy import render
+from backend import config, storage
+from backend.api.schemas import AnalyzeRequest, AnalyzeResponse, EpochsResponse, ObservationResponse
+from backend.astronomy import compact, opencv_detection, render
 from backend.astronomy.difference import significance_map
+from backend.astronomy.fits_loader import load_fits_observation
 
 router = APIRouter(prefix="/api")
 
@@ -97,7 +111,10 @@ def _load_raw_patch(observation_id: str, row: int, column: int, size: int) -> tu
 
 def _png_response(image: Image.Image) -> Response:
     payload = BytesIO()
-    image.save(payload, format="PNG", optimize=True)
+    # `optimize=True` re-compresses PNGs at ~5x the cost for a ~3% size saving;
+    # the default zlib level is far faster and effectively identical for these
+    # smooth astronomical images.
+    image.save(payload, format="PNG", compress_level=1)
     return Response(content=payload.getvalue(), media_type="image/png")
 
 
@@ -257,6 +274,41 @@ def images() -> list[ObservationResponse]:
     return list(_catalog().values())
 
 
+@router.get("/skymap", response_model=SkyMapResponse)
+def skymap() -> SkyMapResponse:
+    """Coordinates + previews for every observation on the homepage, for a sky-map.
+
+    The homepage displays one cached observation per tile; this endpoint returns
+    each observation's RA/Dec (in degrees) and its preview URL so the frontend
+    can place a pin on an all-sky map. RA maps to longitude (0–360), Dec to
+    latitude (−90–90).
+    """
+    items: list[SkyMapItem] = []
+    for observation in _catalog().values():
+        if observation.ra is None or observation.dec is None:
+            continue
+        items.append(
+            SkyMapItem(
+                observation_id=observation.observation_id,
+                ra=observation.ra,
+                dec=observation.dec,
+                epoch=observation.epoch,
+                band=observation.band,
+                wavelength=observation.wavelength,
+                source=observation.source,
+                preview_url=observation.image_url,
+            )
+        )
+    return SkyMapResponse(
+        status="ok" if items else "empty",
+        observations=items,
+        caveats=[
+            "Positions are observation pointing centers (RA/Dec in degrees), not precise source locations.",
+            "The sky map uses an equirectangular projection: RA = longitude, Dec = latitude.",
+        ],
+    )
+
+
 # Rendered aligned-cutout PNGs are small (~100 KB); keep a bounded in-memory
 # cache so timeline playback does not re-read a FITS file per frame.
 _CUTOUT_CACHE_LIMIT = 256
@@ -296,7 +348,7 @@ def _cutout_png(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     payload = BytesIO()
-    Image.fromarray(rgb, mode="RGB").save(payload, format="PNG", optimize=True)
+    Image.fromarray(rgb, mode="RGB").save(payload, format="PNG", compress_level=1)
     data = payload.getvalue()
     if len(_cutout_cache) >= _CUTOUT_CACHE_LIMIT:
         _cutout_cache.pop(next(iter(_cutout_cache)))
@@ -552,6 +604,32 @@ _ALIGNED_CAVEATS = [
 ]
 
 
+@router.get("/patch_center")
+def patch_center(
+    ra: float = Query(..., ge=0, lt=360),
+    dec: float = Query(..., ge=-90, le=90),
+    fov: float = Query(..., ge=0.5, le=240.0),
+    size: int = Query(default=256, ge=8, le=cutout_module.MAX_CUTOUT_SIZE),
+    x0: float = Query(..., ge=0, le=1),
+    y0: float = Query(..., ge=0, le=1),
+    x1: float = Query(..., ge=0, le=1),
+    y1: float = Query(..., ge=0, le=1),
+) -> dict[str, float]:
+    """Map a fractional image rectangle to the sky center + FOV of that patch.
+
+    Takes a selection on the aligned cutout grid (fractions 0..1 of the image
+    width/height) and returns the (ra, dec, fov_arcmin) that re-centers a new
+    cutout on exactly that sub-region, so the frontend can "zoom in" on a patch
+    without doing any sky math itself.
+    """
+    if not (0 <= x0 < x1 <= 1) or not (0 <= y0 < y1 <= 1):
+        raise HTTPException(status_code=422, detail="selection must satisfy 0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1")
+    grid = cutout_module.aligned_grid_wcs(ra, dec, fov, size)
+    center_sky = grid.wcs_pix2world([[((x0 + x1) / 2) * size, ((y0 + y1) / 2) * size]], 0)[0]
+    new_fov = fov * max(x1 - x0, y1 - y0)
+    return {"ra": float(center_sky[0] % 360.0), "dec": float(center_sky[1]), "fov_arcmin": float(new_fov)}
+
+
 @router.get("/diff/aligned")
 def aligned_difference_preview(
     context_epoch: str,
@@ -568,6 +646,76 @@ def aligned_difference_preview(
     )
     png = Image.fromarray(render.render_difference(significance, valid), mode="RGB")
     return _png_response(png)
+
+
+@router.get("/explore/aligned")
+def explore_aligned_preview(
+    context_epoch: str,
+    target_epoch: str,
+    ra: float = Query(..., ge=0, lt=360),
+    dec: float = Query(..., ge=-90, le=90),
+    fov: float = Query(default=15.0, ge=0.5, le=240.0),
+    size: int = Query(default=256, ge=8, le=cutout_module.MAX_CUTOUT_SIZE),
+) -> Response:
+    """Difference image with OpenCV-detected candidates boxed (visual aid)."""
+    cut_a, cut_b = _aligned_pair(context_epoch, target_epoch, ra, dec, fov, size)
+    significance, valid = significance_map(
+        cut_a.image, cut_a.variance, cut_a.valid_mask, cut_b.image, cut_b.variance, cut_b.valid_mask
+    )
+    diff_rgb = render.render_difference(significance, valid)
+    candidates, _mask = opencv_detection.detect_changes(diff_rgb)
+    annotated = opencv_detection.annotate(diff_rgb, candidates)
+    return _png_response(Image.fromarray(annotated, mode="RGB"))
+
+
+@router.post("/explore_region", response_model=AnalyzeResponse)
+def explore_region(request: AnalyzeRegionRequest) -> AnalyzeResponse:
+    """OpenCV change detection on the rendered difference image (visual aid).
+
+    Distinct from /analyze_region (the noise-normalized scientific baseline).
+    Candidates here are thresholded connected components on a display render,
+    not significance detections.
+    """
+    cut_a, cut_b = _aligned_pair(
+        request.context_epoch, request.target_epoch, request.ra, request.dec, request.fov_arcmin, request.size
+    )
+    significance, valid = significance_map(
+        cut_a.image, cut_a.variance, cut_a.valid_mask, cut_b.image, cut_b.variance, cut_b.valid_mask
+    )
+    diff_rgb = render.render_difference(significance, valid)
+    candidates, _mask = opencv_detection.detect_changes(diff_rgb)
+    annotated_url = (
+        f"/api/explore/aligned?context_epoch={request.context_epoch}&target_epoch={request.target_epoch}"
+        f"&ra={request.ra}&dec={request.dec}&fov={request.fov_arcmin}&size={request.size}"
+    )
+    return AnalyzeResponse(
+        status="ok",
+        context_epoch=request.context_epoch,
+        target_epoch=request.target_epoch,
+        difference_score=None,
+        difference_image_url=annotated_url,
+        candidates=[
+            {
+                "candidate_id": candidate["candidate_id"],
+                "source": "opencv",
+                "row": candidate["row"],
+                "column": candidate["column"],
+                "height": candidate["height"],
+                "width": candidate["width"],
+                "area": candidate["area"],
+                "score": candidate["score"],
+                "coordinate_space": candidate["coordinate_space"],
+                "classification": "unclassified_candidate",
+                "caveat": "OpenCV visual-aid candidate on a rendered difference image; not noise-normalized.",
+            }
+            for candidate in candidates
+        ],
+        caveats=[
+            "OpenCV candidates are thresholded connected components on a display render, not significance detections.",
+            "Candidates are unclassified and require scientific validation.",
+            "The rendered difference can saturate; scores are display magnitudes, not sigma.",
+        ],
+    )
 
 
 @router.post("/analyze_region", response_model=AnalyzeResponse)
@@ -635,6 +783,26 @@ def fetch_region(
     return result
 
 
+def _region_preview_url(ra: float, dec: float) -> str | None:
+    """A cutout preview URL for a sky position, from any cached observation covering it."""
+    for record in _catalog().values():
+        if not cutout_module.contains_position(record.provenance.get("header") or {}, ra, dec):
+            continue
+        return (
+            f"/api/cutout/{record.observation_id}?ra={ra}&dec={dec}"
+            f"&fov=24&size=256"
+        )
+    return None
+
+
+def _interaction_count() -> int:
+    """Total social interactions, used to bust the feed cache when scoring changes."""
+    from backend.storage import likes as likes_store
+    from backend.storage import marks as marks_store
+
+    return len(marks_store.list_marks()) + len(likes_store.list_likes())
+
+
 def _feed_positions() -> list[tuple[float, float, str]]:
     """Candidate feed centers: fetched regions (exact) plus coarse 1-degree cells.
 
@@ -677,11 +845,14 @@ def feed(
     are interleaved so scrolling varies, and offset tiles show more of each
     region than just its center.
     """
-    cache_key = (len(_catalog()), fov, limit)
+    cache_key = (len(_catalog()), fov, limit, _interaction_count())
     cached = _feed_cache.get(cache_key)
     if cached is not None:
         return cached
 
+    from backend.storage import scoring
+
+    scores = scoring.all_scores()
     records = list(_catalog().values())
     half_fov_deg = fov / 60.0 / 2.0
     per_region: list[list[FeedItem]] = []
@@ -718,12 +889,16 @@ def feed(
                     band=band,
                     n_frames=len(covering),
                     region_key=key,
+                    **scores.get(key, {"score": 0, "likes": 0}),
                 )
             )
         if items:
             per_region.append(items)
 
-    # Interleave regions so consecutive tiles are usually different sky.
+    # Order regions by engagement score (highest first), then interleave the
+    # offset tiles within each region so scrolling varies without hiding the
+    # higher-scoring regions behind lower ones.
+    per_region.sort(key=lambda items: items[0].score, reverse=True)
     interleaved: list[FeedItem] = []
     while per_region and len(interleaved) < limit:
         for items in list(per_region):
@@ -738,6 +913,7 @@ def feed(
         caveats=[
             "Every tile replays real SPHEREx observations; nothing in the feed is synthetic.",
             "Tiles come from the locally cached regions — fetch more positions to grow the feed.",
+            "Ordering reflects likes, not scientific significance.",
         ],
         message=None if interleaved else "No cached region has two epochs yet. Fetch a position from the archive first.",
     )
@@ -788,6 +964,7 @@ def create_mark(request: MarkCreateRequest) -> MarkResponse:
             "epoch": request.epoch,
             "note": note or None,
             "source": request.source,
+            "region_key": request.region_key,
             "preview_url": preview_url,
         }
     )
@@ -801,6 +978,66 @@ def delete_mark(mark_id: str) -> dict[str, str]:
     if not marks_store.delete_mark(mark_id):
         raise HTTPException(status_code=404, detail=f"unknown mark: {mark_id}")
     return {"status": "deleted", "id": mark_id}
+
+
+@router.post("/likes", response_model=LikeResponse)
+def create_like(request: LikeCreateRequest) -> LikeResponse:
+    """Record a like on a sky region."""
+    from backend.storage import likes as likes_store
+
+    like = likes_store.add_like(request.region_key)
+    return LikeResponse(**like)
+
+
+@router.get("/likes", response_model=LikesResponse)
+def get_likes(region_key: str = Query(..., max_length=64)) -> LikesResponse:
+    """How many times this sky region has been liked."""
+    from backend.storage import likes as likes_store
+
+    return LikesResponse(
+        status="ok",
+        region_key=region_key,
+        count=likes_store.count_likes(region_key),
+    )
+
+
+@router.get("/survey", response_model=SurveyResponse)
+def survey() -> SurveyResponse:
+    """Likes-based ranking of every sky region with any likes.
+
+    Regions are ranked by their like count, highest first. This is a social
+    leaderboard, not a scientific ranking: more likes means more people found
+    it interesting, not that the sky there is objectively special.
+    """
+    from backend.storage import scoring
+
+    items: list[SurveyItem] = []
+    for region_key, breakdown in scoring.all_scores().items():
+        try:
+            ra_text, dec_text = region_key.split(",", 1)
+            ra, dec = float(ra_text) % 360.0, float(dec_text)
+        except ValueError:
+            continue
+        preview_url = _region_preview_url(ra, dec)
+        items.append(
+            SurveyItem(
+                region_key=region_key,
+                ra=ra,
+                dec=dec,
+                score=breakdown["score"],
+                likes=breakdown["likes"],
+                preview_url=preview_url,
+            )
+        )
+    items.sort(key=lambda item: item.score, reverse=True)
+    return SurveyResponse(
+        status="ok" if items else "empty",
+        regions=items,
+        caveats=[
+            "This is a likes-based leaderboard, not a scientific ranking.",
+            "Score = number of likes.",
+        ],
+    )
 
 
 @router.get("/gaia", response_model=GaiaOverlayResponse)

@@ -13,115 +13,45 @@ type Props = {
   candidates: Candidate[];
 };
 
-const TERRAIN_WIDTH = 3.35;
-const TERRAIN_HEIGHT = 2.2;
-const TERRAIN_SEGMENTS_X = 128;
-const TERRAIN_SEGMENTS_Y = 88;
+const MAX_STARS = 2500;
+const MIN_STAR_LUM = 0.08; // relative brightness threshold for a "detected" source
+const FIELD_RADIUS = 9;
+const MOVE_SPEED = 2.4;
+const LOOK_SPEED = 2.2;
 
-const terrainVertexShader = `
-  uniform sampler2D imageA;
-  uniform sampler2D imageB;
-  uniform float mixAmount;
-  uniform float time;
-  varying vec2 vUv;
-  varying float vHeight;
-
-  float sampleLuma(vec3 color) {
-    return dot(color, vec3(0.2126, 0.7152, 0.0722));
-  }
-
-  void main() {
-    vUv = uv;
-    vec3 colorA = texture2D(imageA, uv).rgb;
-    vec3 colorB = texture2D(imageB, uv).rgb;
-    float brightness = sampleLuma(mix(colorA, colorB, mixAmount));
-    float relief = smoothstep(0.035, 0.92, brightness);
-    float edgeFade = sin(uv.x * 3.14159265) * sin(uv.y * 3.14159265);
-    float height = relief * 0.62 * edgeFade;
-    vHeight = height;
-
-    vec3 displaced = position;
-    displaced.z += height;
-    displaced.z += sin((uv.x + time * 0.018) * 18.0) * 0.008 * relief;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
-  }
-`;
-
-const terrainFragmentShader = `
-  uniform sampler2D imageA;
-  uniform sampler2D imageB;
-  uniform float mixAmount;
-  uniform float time;
-  varying vec2 vUv;
-  varying float vHeight;
-
-  float sampleLuma(vec3 color) {
-    return dot(color, vec3(0.2126, 0.7152, 0.0722));
-  }
-
-  void main() {
-    vec3 image = mix(texture2D(imageA, vUv).rgb, texture2D(imageB, vUv).rgb, mixAmount);
-    float brightness = sampleLuma(image);
-    vec2 gridUv = vUv * vec2(32.0, 22.0);
-    vec2 grid = abs(fract(gridUv - 0.5) - 0.5);
-    float line = 1.0 - smoothstep(0.46, 0.5, max(grid.x, grid.y));
-    float edge = smoothstep(0.0, 0.18, min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y)));
-    vec3 terrain = image * (0.78 + vHeight * 0.9);
-    terrain += vec3(0.10, 0.20, 0.27) * line * 0.16 * edge;
-    terrain += vec3(0.22, 0.08, 0.42) * smoothstep(0.28, 0.75, vHeight) * 0.42;
-    terrain += vec3(0.12, 0.44, 0.42) * smoothstep(0.52, 0.9, brightness) * 0.24;
-    float scan = 0.018 * sin((vUv.y + time * 0.025) * 420.0);
-    gl_FragColor = vec4(terrain + scan, 1.0);
-  }
-`;
-
-function createAnomalyMarker(candidate: Candidate): THREE.Group {
-  const marker = new THREE.Group();
-  const x = ((candidate.column + candidate.width / 2) / 128 - 0.5) * TERRAIN_WIDTH;
-  const y = (0.5 - (candidate.row + candidate.height / 2) / 128) * TERRAIN_HEIGHT;
-  const width = Math.max((candidate.width / 128) * TERRAIN_WIDTH, 0.035);
-  const height = Math.max((candidate.height / 128) * TERRAIN_HEIGHT, 0.035);
-  const outline = new THREE.LineLoop(
-    new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(x - width / 2, y - height / 2, 0.04),
-      new THREE.Vector3(x + width / 2, y - height / 2, 0.04),
-      new THREE.Vector3(x + width / 2, y + height / 2, 0.04),
-      new THREE.Vector3(x - width / 2, y + height / 2, 0.04),
-    ]),
-    new THREE.LineBasicMaterial({ color: cosmicColors.warning, transparent: true, opacity: 0.88 }),
-  );
-  const dot = new THREE.Mesh(
-    new THREE.CircleGeometry(0.018, 12),
-    new THREE.MeshBasicMaterial({ color: cosmicColors.warning, transparent: true, opacity: 0.85 }),
-  );
-  dot.position.set(x, y, 0.045);
-  marker.add(outline, dot);
-  return marker;
-}
-
+/**
+ * A navigable 3-D star field built from the *real* observation, not synthetic
+ * points. We detect local brightness maxima in the rendered SPHEREx cutout —
+ * i.e. actual sources — and place one point per star at its true sky position,
+ * colored by the image's wavelength-tinted pixel and sized by its real
+ * intensity. The depth (z) axis is a visual aid (brightness → parallax), not a
+ * physical distance; the sky itself is 2-D in these cutouts.
+ */
 export default function SpaceProjection({ first, second, amount, candidates }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const materialRef = useRef<THREE.ShaderMaterial | null>(null);
-  const terrainRef = useRef<THREE.Mesh | null>(null);
-  const anomalyGroupRef = useRef<THREE.Group | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const pointsRef = useRef<THREE.Points | null>(null);
+  const anomalyGroupRef = useRef<THREE.Group | null>(null);
+  const keysRef = useRef<Record<string, boolean>>({});
+  const yawPitchRef = useRef({ yaw: 0, pitch: 0 });
   const [dragging, setDragging] = useState(false);
-  const dragStart = useRef({ x: 0, y: 0 });
-  const orbitStart = useRef({ x: 0, y: 0 });
-  const orbitRef = useRef({ x: -0.44, y: 0.18 });
-  const cameraStart = useRef({ x: 0, y: 0, z: 3.65 });
+  const dragStart = useRef({ x: 0, y: 0, yaw: 0, pitch: 0 });
+  const [hint, setHint] = useState("Click to look · WASD to move");
 
+  // Build the scene once.
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#070a10");
+    scene.fog = new THREE.FogExp2("#070a10", 0.11);
     sceneRef.current = scene;
-    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
-    camera.position.set(0, 0.02, 3.65);
+
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
+    camera.position.set(0, 0, 6.5);
     cameraRef.current = camera;
 
     let renderer: THREE.WebGLRenderer;
@@ -135,40 +65,28 @@ export default function SpaceProjection({ first, second, amount, candidates }: P
     host.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    const geometry = new THREE.PlaneGeometry(
-      TERRAIN_WIDTH,
-      TERRAIN_HEIGHT,
-      TERRAIN_SEGMENTS_X,
-      TERRAIN_SEGMENTS_Y,
-    );
-    const material = new THREE.ShaderMaterial({
-      uniforms: {
-        imageA: { value: new THREE.Texture() },
-        imageB: { value: new THREE.Texture() },
-        mixAmount: { value: 0.5 },
-        time: { value: 0 },
-      },
-      vertexShader: terrainVertexShader,
-      fragmentShader: terrainFragmentShader,
-      side: THREE.DoubleSide,
+    // Point cloud (positions/colors filled from real source detection).
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(0), 3));
+    geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(0), 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 0.03,
+      vertexColors: true,
+      sizeAttenuation: true,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
     });
-    const terrain = new THREE.Mesh(geometry, material);
-    terrain.rotation.x = orbitRef.current.x;
-    terrain.rotation.y = orbitRef.current.y;
-    terrainRef.current = terrain;
-    materialRef.current = material;
-    scene.add(terrain);
+    const points = new THREE.Points(geometry, material);
+    scene.add(points);
+    pointsRef.current = points;
 
-    const floor = new THREE.GridHelper(5.5, 28, 0x25445a, 0x12202b);
-    floor.position.z = -0.16;
-    floor.rotation.x = Math.PI / 2;
-    (floor.material as THREE.Material).transparent = true;
-    (floor.material as THREE.Material).opacity = 0.28;
-    scene.add(floor);
-
+    // Anomaly markers (boxed outlines, billboarded toward the camera).
     const anomalyGroup = new THREE.Group();
     anomalyGroupRef.current = anomalyGroup;
-    terrain.add(anomalyGroup);
+    scene.add(anomalyGroup);
 
     const resize = () => {
       const width = host.clientWidth;
@@ -181,14 +99,39 @@ export default function SpaceProjection({ first, second, amount, candidates }: P
     resizeObserver.observe(host);
     resize();
 
+    const clock = new THREE.Clock();
     let animationFrame = 0;
-    const render = (time: number) => {
-      material.uniforms.time.value = time * 0.001;
-      anomalyGroup.children.forEach((marker, index) => {
-        const pulse = 1 + Math.sin(time * 0.003 + index) * 0.12;
-        const dot = marker.children.find((child) => child instanceof THREE.Mesh);
-        if (dot) dot.scale.setScalar(pulse);
-      });
+    const render = () => {
+      const dt = Math.min(clock.getDelta(), 0.1);
+
+      // Fly movement along the camera's facing direction.
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+      const move = new THREE.Vector3();
+      if (keysRef.current.KeyW) move.add(forward);
+      if (keysRef.current.KeyS) move.sub(forward);
+      if (keysRef.current.KeyA) move.sub(right);
+      if (keysRef.current.KeyD) move.add(right);
+      if (move.lengthSq() > 0) {
+        move.y = 0;
+        move.normalize().multiplyScalar(MOVE_SPEED * dt);
+        camera.position.add(move);
+      }
+      if (keysRef.current.KeyR) camera.position.y += MOVE_SPEED * dt;
+      if (keysRef.current.KeyF) camera.position.y -= MOVE_SPEED * dt;
+
+      // Keep the field centered on the flyer (endless starfield feel).
+      const horizontal = Math.hypot(camera.position.x, camera.position.z);
+      if (horizontal > FIELD_RADIUS) {
+        const scale = FIELD_RADIUS / horizontal;
+        camera.position.x *= scale;
+        camera.position.z *= scale;
+      }
+      camera.position.y = THREE.MathUtils.clamp(camera.position.y, -FIELD_RADIUS * 0.6, FIELD_RADIUS * 0.6);
+
+      // Keep markers facing the camera.
+      anomalyGroup.children.forEach((marker) => marker.lookAt(camera.position));
+
       renderer.render(scene, camera);
       animationFrame = window.requestAnimationFrame(render);
     };
@@ -199,10 +142,6 @@ export default function SpaceProjection({ first, second, amount, candidates }: P
       window.cancelAnimationFrame(animationFrame);
       geometry.dispose();
       material.dispose();
-      (material.uniforms.imageA.value as THREE.Texture).dispose();
-      (material.uniforms.imageB.value as THREE.Texture).dispose();
-      floor.geometry.dispose();
-      (floor.material as THREE.Material).dispose();
       anomalyGroup.traverse((object) => {
         if (object instanceof THREE.Mesh || object instanceof THREE.Line) {
           object.geometry.dispose();
@@ -212,13 +151,121 @@ export default function SpaceProjection({ first, second, amount, candidates }: P
       renderer.dispose();
       renderer.domElement.remove();
       rendererRef.current = null;
-      terrainRef.current = null;
-      anomalyGroupRef.current = null;
       sceneRef.current = null;
       cameraRef.current = null;
+      pointsRef.current = null;
+      anomalyGroupRef.current = null;
     };
   }, []);
 
+  // Detect real sources in the blended observation and build the point cloud
+  // from their actual sky positions and intensities.
+  useEffect(() => {
+    const points = pointsRef.current;
+    if (!points) return;
+
+    const urls = [
+      resolveAssetUrl(first?.image_url ?? null),
+      resolveAssetUrl(second?.image_url ?? null),
+    ];
+    if (!urls[0] && !urls[1]) return;
+
+    const imageA = urls[0] ? new Image() : null;
+    const imageB = urls[1] ? new Image() : null;
+    const loaded: (HTMLImageElement | null)[] = [null, null];
+
+    const render = () => {
+      if ((imageA && !loaded[0]) || (imageB && !loaded[1])) return;
+      const size = 256;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      if (loaded[0]) {
+        ctx.globalAlpha = imageB ? 1 - amount : 1;
+        ctx.drawImage(loaded[0], 0, 0, size, size);
+      }
+      if (loaded[1]) {
+        ctx.globalAlpha = imageA ? amount : 1;
+        ctx.drawImage(loaded[1], 0, 0, size, size);
+      }
+      ctx.globalAlpha = 1;
+      const data = ctx.getImageData(0, 0, size, size).data;
+
+      // Luminance map (0..1) over the rendered frame.
+      const lum = new Float32Array(size * size);
+      for (let p = 0; p < size * size; p++) {
+        lum[p] = (data[p * 4] + data[p * 4 + 1] + data[p * 4 + 2]) / 3 / 255;
+      }
+
+      // Detect local brightness maxima (real sources): a pixel brighter than
+      // its 8 neighbours and above the threshold. This yields one point per
+      // star rather than a filled blob, and only at true source locations.
+      const detections: { x: number; y: number; lum: number }[] = [];
+      for (let y = 1; y < size - 1; y++) {
+        for (let x = 1; x < size - 1; x++) {
+          const c = lum[y * size + x];
+          if (c < MIN_STAR_LUM) continue;
+          if (
+            c >= lum[(y - 1) * size + (x - 1)] &&
+            c >= lum[(y - 1) * size + x] &&
+            c >= lum[(y - 1) * size + (x + 1)] &&
+            c >= lum[y * size + (x - 1)] &&
+            c >= lum[y * size + (x + 1)] &&
+            c >= lum[(y + 1) * size + (x - 1)] &&
+            c >= lum[(y + 1) * size + x] &&
+            c >= lum[(y + 1) * size + (x + 1)]
+          ) {
+            detections.push({ x, y, lum: c });
+          }
+        }
+      }
+      // Keep the brightest sources so the field stays readable.
+      detections.sort((a, b) => b.lum - a.lum);
+      const stars = detections.slice(0, MAX_STARS);
+
+      const positions = new Float32Array(stars.length * 3);
+      const colors = new Float32Array(stars.length * 3);
+      for (let i = 0; i < stars.length; i++) {
+        const { x, y, lum: brightness } = stars[i];
+        const fx = x / size;
+        const fy = y / size;
+        const idx = (y * size + x) * 4;
+        const depth = -2.5 + brightness * 7;
+        positions[i * 3] = (fx - 0.5) * FIELD_RADIUS;
+        positions[i * 3 + 1] = (0.5 - fy) * FIELD_RADIUS * 0.62;
+        positions[i * 3 + 2] = depth;
+        colors[i * 3] = data[idx] / 255;
+        colors[i * 3 + 1] = data[idx + 1] / 255;
+        colors[i * 3 + 2] = data[idx + 2] / 255;
+      }
+
+      const geometry = points.geometry as THREE.BufferGeometry;
+      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    };
+
+    if (imageA) {
+      imageA.onload = () => {
+        loaded[0] = imageA;
+        render();
+      };
+      imageA.crossOrigin = "anonymous";
+      imageA.src = urls[0] as string;
+    }
+    if (imageB) {
+      imageB.onload = () => {
+        loaded[1] = imageB;
+        render();
+      };
+      imageB.crossOrigin = "anonymous";
+      imageB.src = urls[1] as string;
+    }
+    render();
+  }, [first, second, amount]);
+
+  // Anomaly markers (fixed sky-grid positions derived from candidates).
   useEffect(() => {
     const group = anomalyGroupRef.current;
     if (!group) return;
@@ -231,77 +278,51 @@ export default function SpaceProjection({ first, second, amount, candidates }: P
         }
       });
     }
-    candidates.forEach((candidate) => group.add(createAnomalyMarker(candidate)));
+    candidates.forEach((candidate) => {
+      const x = ((candidate.column + candidate.width / 2) / 256 - 0.5) * FIELD_RADIUS;
+      const y = (0.5 - (candidate.row + candidate.height / 2) / 256) * FIELD_RADIUS * 0.62;
+      const marker = new THREE.Mesh(
+        new THREE.RingGeometry(0.09, 0.11, 32),
+        new THREE.MeshBasicMaterial({ color: cosmicColors.warning, transparent: true, opacity: 0.9, side: THREE.DoubleSide }),
+      );
+      marker.position.set(x, y, -1.5);
+      group.add(marker);
+    });
   }, [candidates]);
 
+  // Keyboard handling.
   useEffect(() => {
-    const material = materialRef.current;
-    if (!material) return;
-    material.uniforms.mixAmount.value = amount;
-  }, [amount]);
-
-  useEffect(() => {
-    const material = materialRef.current;
-    if (!material) return;
-    const loader = new THREE.TextureLoader();
-    const urls = [
-      resolveAssetUrl(first?.image_url ?? null),
-      resolveAssetUrl(second?.image_url ?? null),
-    ];
-    urls.forEach((url, index) => {
-      if (!url) return;
-      loader.load(url, (texture) => {
-        texture.colorSpace = THREE.SRGBColorSpace;
-        texture.minFilter = THREE.LinearFilter;
-        const uniform = material.uniforms[index === 0 ? "imageA" : "imageB"];
-        (uniform.value as THREE.Texture).dispose();
-        uniform.value = texture;
-      });
-    });
-  }, [first, second]);
+    const down = (event: KeyboardEvent) => {
+      keysRef.current[event.code] = true;
+      if (event.code === "ArrowLeft") yawPitchRef.current.yaw += LOOK_SPEED * 0.05;
+      if (event.code === "ArrowRight") yawPitchRef.current.yaw -= LOOK_SPEED * 0.05;
+    };
+    const up = (event: KeyboardEvent) => {
+      keysRef.current[event.code] = false;
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, []);
 
   const pointerDown = (event: React.PointerEvent) => {
     setDragging(true);
-    dragStart.current = { x: event.clientX, y: event.clientY };
-    orbitStart.current = { ...orbitRef.current };
-    cameraStart.current = {
-      x: cameraRef.current?.position.x ?? 0,
-      y: cameraRef.current?.position.y ?? 0,
-      z: cameraRef.current?.position.z ?? 3.65,
-    };
+    dragStart.current = { x: event.clientX, y: event.clientY, yaw: yawPitchRef.current.yaw, pitch: yawPitchRef.current.pitch };
+    setHint("Drag to look · WASD to move");
     event.currentTarget.setPointerCapture(event.pointerId);
   };
   const pointerMove = (event: React.PointerEvent) => {
-    if (!dragging || !terrainRef.current || !cameraRef.current) return;
-    const isPan = event.buttons === 2 || event.buttons === 4 || event.shiftKey;
-    if (isPan) {
-      cameraRef.current.position.x = cameraStart.current.x - (event.clientX - dragStart.current.x) * 0.004;
-      cameraRef.current.position.y = cameraStart.current.y + (event.clientY - dragStart.current.y) * 0.004;
-      cameraRef.current.lookAt(0, 0, 0);
-      return;
-    }
-    orbitRef.current = {
-      x: Math.max(-1.1, Math.min(0.15, orbitStart.current.x + (event.clientY - dragStart.current.y) * 0.004)),
-      y: orbitStart.current.y + (event.clientX - dragStart.current.x) * 0.004,
-    };
-    terrainRef.current.rotation.x = orbitRef.current.x;
-    terrainRef.current.rotation.y = orbitRef.current.y;
+    if (!dragging || !cameraRef.current) return;
+    const dx = event.clientX - dragStart.current.x;
+    const dy = event.clientY - dragStart.current.y;
+    yawPitchRef.current.yaw = dragStart.current.yaw - dx * 0.004;
+    yawPitchRef.current.pitch = THREE.MathUtils.clamp(dragStart.current.pitch - dy * 0.004, -1.2, 1.2);
+    const euler = new THREE.Euler(yawPitchRef.current.pitch, yawPitchRef.current.yaw, 0, "YXZ");
+    cameraRef.current.quaternion.setFromEuler(euler);
   };
-  // Native non-passive listener: React's onWheel cannot preventDefault, so the
-  // page would scroll while zooming. This keeps the wheel inside the 3-D view.
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    const onWheel = (event: WheelEvent) => {
-      event.preventDefault();
-      const camera = cameraRef.current;
-      if (!camera) return;
-      camera.position.z = Math.max(2.15, Math.min(7, camera.position.z + event.deltaY * 0.0025));
-      camera.lookAt(0, 0, 0);
-    };
-    host.addEventListener("wheel", onWheel, { passive: false });
-    return () => host.removeEventListener("wheel", onWheel);
-  }, []);
 
   return (
     <Box>
@@ -312,7 +333,7 @@ export default function SpaceProjection({ first, second, amount, candidates }: P
         onPointerUp={() => setDragging(false)}
         onPointerCancel={() => setDragging(false)}
         onPointerLeave={() => setDragging(false)}
-        onContextMenu={(event) => event.preventDefault()}
+        tabIndex={0}
         sx={{
           height: { xs: 300, md: 470 },
           border: `1px solid ${cosmicColors.border}`,
@@ -322,14 +343,15 @@ export default function SpaceProjection({ first, second, amount, candidates }: P
           overflow: "hidden",
           position: "relative",
           touchAction: "none",
+          outline: "none",
         }}
       >
         <Stack direction="row" spacing={1} sx={{ position: "absolute", top: 14, left: 14, pointerEvents: "none", zIndex: 1 }}>
-          <Chip label="Brightness relief (height = brightness)" size="small" sx={{ bgcolor: "rgba(5,7,8,.82)", color: cosmicColors.accent, border: `1px solid ${cosmicColors.accentStrong}` }} />
-          {candidates.length > 0 && <Chip label={`${candidates.length} flagged regions`} size="small" sx={{ bgcolor: "rgba(5,7,8,.82)", color: cosmicColors.violet }} />}
+          <Chip label="3-D star field · real sources" size="small" sx={{ bgcolor: "rgba(5,7,8,.82)", color: cosmicColors.accent, border: `1px solid ${cosmicColors.accentStrong}` }} />
+          {candidates.length > 0 && <Chip label={`${candidates.length} flagged regions`} size="small" sx={{ bgcolor: "rgba(5,7,8,.82)", color: cosmicColors.danger }} />}
         </Stack>
         <Typography variant="caption" sx={{ position: "absolute", bottom: 12, left: 14, color: cosmicColors.muted, pointerEvents: "none", zIndex: 1 }}>
-          Drag to orbit · Shift/right-drag to pan · wheel to zoom · scrub above to morph epochs
+          {hint}
         </Typography>
       </Box>
       <Stack direction="row" justifyContent="space-between" sx={{ mt: 1.2 }}>
