@@ -106,7 +106,7 @@ def _parse_tap_json(payload: bytes) -> list[GaiaSource]:
 
 
 def cone_search(
-    ra: float, dec: float, radius_arcmin: float, *, timeout: float = 25.0
+    ra: float, dec: float, radius_arcmin: float, *, timeout: float = 10.0, attempts: int = 1
 ) -> tuple[list[GaiaSource], dict[str, Any]]:
     """Catalogued Gaia DR3 sources within ``radius_arcmin`` of (ra, dec).
 
@@ -134,7 +134,10 @@ def cone_search(
         }
     )
     try:
-        payload = http_get(f"{GAIA_TAP_SYNC}?{query}", timeout=timeout, attempts=2)
+        # Hard-bounded: this runs inside interactive requests (analyze, overlay)
+        # that must finish well inside HTTP-proxy limits (~30 s). A slow ESA
+        # archive degrades to "catalog unavailable", never to a hung request.
+        payload = http_get(f"{GAIA_TAP_SYNC}?{query}", timeout=timeout, attempts=attempts)
         sources = _parse_tap_json(payload)
     except Exception as error:  # noqa: BLE001 - any failure means "catalog unavailable", never fabricate
         raise GaiaUnavailableError(f"Gaia archive query failed: {error}") from error

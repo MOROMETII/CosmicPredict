@@ -47,7 +47,7 @@ from backend.astronomy import cutout as cutout_module
 from backend.astronomy import render
 from backend import config, storage
 from backend.api.schemas import AnalyzeRequest, AnalyzeResponse, EpochsResponse, ObservationResponse
-from backend.astronomy import compact, opencv_detection, render
+from backend.astronomy import render
 from backend.astronomy.difference import significance_map
 from backend.astronomy.fits_loader import load_fits_observation
 
@@ -377,14 +377,33 @@ def timeline(
     fov: float = Query(default=15.0, ge=0.5, le=240.0),
     band: str | None = Query(default=None, description="detector band; defaults to the best-covered one"),
 ) -> TimelineResponse:
-    """Chronological, same-band observations whose detector footprint contains (ra, dec)."""
+    """Chronological, same-band observations whose detector footprint contains (ra, dec).
+
+    A frame must also cover most of the requested field of view: live-fetched
+    archive cutouts are small (~24 arcmin) patches, so at a wide FOV they would
+    render as mostly gray. Such frames are kept for the FOVs they can serve and
+    dropped from wider views, unless that would leave the view empty.
+    """
     containing = [
         record
         for record in _catalog().values()
         if cutout_module.contains_position(record.provenance.get("header") or {}, ra, dec)
     ]
+    coverages = {
+        record.observation_id: cutout_module.footprint_coverage(
+            record.provenance.get("header") or {}, ra, dec, fov
+        )
+        for record in containing
+    }
+    minimum_coverage = 0.7
+    covering = [
+        record for record in containing if (coverages.get(record.observation_id) or 0.0) >= minimum_coverage
+    ]
+    if not covering:
+        covering = containing  # partial frames beat an empty player
+
     by_band: dict[str, list[ObservationResponse]] = {}
-    for record in containing:
+    for record in covering:
         by_band.setdefault(record.band or "unknown", []).append(record)
     available = {name: len(records) for name, records in sorted(by_band.items())}
 
@@ -398,12 +417,6 @@ def timeline(
     # frame) so true brightness changes, e.g. variable stars, stay visible.
     stretch_suffix = ""
     if frames:
-        coverages = {
-            record.observation_id: cutout_module.footprint_coverage(
-                record.provenance.get("header") or {}, ra, dec, fov
-            )
-            for record in frames
-        }
         reference = max(frames, key=lambda r: coverages.get(r.observation_id) or 0.0)
         try:
             _, aligned = _aligned_cutout(reference.observation_id, ra, dec, fov, 256)
@@ -411,8 +424,6 @@ def timeline(
             stretch_suffix = f"&vmin={vmin:.6g}&vmax={vmax:.6g}"
         except HTTPException:
             pass  # fall back to per-frame stretch rather than fail the listing
-    else:
-        coverages = {}
 
     return TimelineResponse(
         status="ok" if frames else "no_matching_observations",
@@ -550,7 +561,7 @@ def _enrich_candidates_with_gaia(
     try:
         # Cover the whole frame (half-diagonal) so every candidate is inside.
         sources, _ = gaia.cone_search(ra, dec, radius_arcmin=fov * 0.75)
-    except gaia.GaiaUnavailableError:
+    except Exception:  # noqa: BLE001 - the catalog check must never break the scan itself
         caveats.append(
             "Gaia DR3 cross-match unavailable (archive unreachable, no cache) — "
             "candidates are NOT checked against the star catalog this time."
@@ -648,6 +659,26 @@ def aligned_difference_preview(
     return _png_response(png)
 
 
+def _load_opencv():
+    """Import the OpenCV layer on demand.
+
+    cv2 is only needed by the AI-scan endpoints; importing it lazily means a
+    machine without opencv installed still serves the scientific Find changes
+    path instead of failing to start at all.
+    """
+    try:
+        from backend.astronomy import opencv_detection
+    except ImportError as error:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "AI scan is unavailable on this server: the opencv-python package is not installed "
+                "(pip install -r backend/requirements.txt). The statistical Find changes works without it."
+            ),
+        ) from error
+    return opencv_detection
+
+
 @router.get("/explore/aligned")
 def explore_aligned_preview(
     context_epoch: str,
@@ -663,6 +694,7 @@ def explore_aligned_preview(
         cut_a.image, cut_a.variance, cut_a.valid_mask, cut_b.image, cut_b.variance, cut_b.valid_mask
     )
     diff_rgb = render.render_difference(significance, valid)
+    opencv_detection = _load_opencv()
     candidates, _mask = opencv_detection.detect_changes(diff_rgb)
     annotated = opencv_detection.annotate(diff_rgb, candidates)
     return _png_response(Image.fromarray(annotated, mode="RGB"))
@@ -683,6 +715,7 @@ def explore_region(request: AnalyzeRegionRequest) -> AnalyzeResponse:
         cut_a.image, cut_a.variance, cut_a.valid_mask, cut_b.image, cut_b.variance, cut_b.valid_mask
     )
     diff_rgb = render.render_difference(significance, valid)
+    opencv_detection = _load_opencv()
     candidates, _mask = opencv_detection.detect_changes(diff_rgb)
     annotated_url = (
         f"/api/explore/aligned?context_epoch={request.context_epoch}&target_epoch={request.target_epoch}"
@@ -1057,7 +1090,7 @@ def gaia_overlay(
 
     try:
         sources, provenance = gaia.cone_search(ra, dec, radius_arcmin=fov * 0.75)
-    except gaia.GaiaUnavailableError as error:
+    except Exception as error:  # noqa: BLE001 - degrade to "unavailable", never 500 the overlay
         return GaiaOverlayResponse(
             status="unavailable",
             ra=ra,

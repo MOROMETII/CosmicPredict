@@ -26,9 +26,9 @@ import {
   Close,
   Favorite,
   HelpOutline,
+  Leaderboard as LeaderboardIcon,
   Pause,
   PlayArrow,
-  RocketLaunch,
   Share,
   Speed,
   StarBorder,
@@ -386,10 +386,6 @@ function ReelCard({
             touchAction: "pan-y",
             userSelect: "none",
             "@keyframes epochFill": { from: { width: "0%" }, to: { width: "100%" } },
-            "@keyframes rocketFly": {
-              "0%": { left: "-6%", transform: "rotate(45deg)" },
-              "100%": { left: "100%", transform: "rotate(45deg)" },
-            },
             "@keyframes burstPop": {
               "0%": { transform: "translate(-50%,-50%) scale(.3)", opacity: 0 },
               "25%": { transform: "translate(-50%,-50%) scale(1.15)", opacity: 1 },
@@ -471,18 +467,6 @@ function ReelCard({
                     )}
                   </Box>
                 ))}
-                {/* Rocket that flies the whole progress track once per loop. */}
-                <RocketLaunch
-                  sx={{
-                    position: "absolute",
-                    top: -7,
-                    fontSize: 17,
-                    color: "#ffb74d",
-                    filter: "drop-shadow(0 0 6px rgba(255,183,77,.8))",
-                    animation: frames.length >= 2 ? `rocketFly ${frames.length * speedMs}ms linear infinite` : undefined,
-                    animationPlayState: holding || paused || !visible ? "paused" : "running",
-                  }}
-                />
               </Stack>
             )}
           </Box>
@@ -818,6 +802,11 @@ export default function ScrollPage() {
           <Tooltip title="How Sky Scroll works">
             <IconButton onClick={() => setTutorialForced(true)} sx={{ color: "#8b97a8" }} aria-label="Open tutorial">
               <HelpOutline />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Leaderboard — the most-liked sky regions">
+            <IconButton component={Link} href="/leaderboard" sx={{ color: "#8b97a8" }} aria-label="Leaderboard">
+              <LeaderboardIcon />
             </IconButton>
           </Tooltip>
           <Button
