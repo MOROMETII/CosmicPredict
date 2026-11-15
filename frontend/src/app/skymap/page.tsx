@@ -133,22 +133,21 @@ export default function SkyMapPage() {
     const decMax = Math.max(...decs);
     const decMid = (decMin + decMax) / 2;
     const decSpan = Math.max(decMax - decMin, 10);
+    const pad = 0.85;
     const fitZoom = Math.max(
       MIN_ZOOM,
-      Math.min(MAX_ZOOM, Math.min(node.clientWidth / ((raSpan / 360) * MAP_W), node.clientHeight / ((decSpan / 180) * MAP_H))),
+      Math.min(
+        MAX_ZOOM,
+        Math.min(
+          (node.clientWidth * pad) / ((raSpan / 360) * MAP_W),
+          (node.clientHeight * pad) / ((decSpan / 180) * MAP_H),
+        ),
+      ),
     );
     const center = worldToScreen(raMid, decMid, fitZoom);
     setZoom(fitZoom);
     setPan({ x: node.clientWidth / 2 - center.x, y: node.clientHeight / 2 - center.y });
   }, [observations]);
-
-  const toScreen = useCallback(
-    (ra: number, dec: number) => {
-      const p = worldToScreen(ra, dec, zoom);
-      return { x: p.x + pan.x, y: p.y + pan.y };
-    },
-    [zoom, pan],
-  );
 
   // Screen (pixel) → sky (RA/Dec) inverse of the projection, for the readout.
   const screenToSky = useCallback(
@@ -167,17 +166,11 @@ export default function SkyMapPage() {
 
   // Starfield + grid are static in world coordinates; they're memoized once and
   // moved via a CSS transform on the parent <svg>, so pan/zoom never recomputes
-  // their 700+ elements.
+  // their 700+ elements. Rendered as a tile (no <defs>) so it can repeat across
+  // the RA 0°/360° seam and the sky stays continuous when panning.
   const worldLayers = useMemo(() => {
     return (
       <>
-        <defs>
-          <linearGradient id="milkyway" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgba(120,140,190,0)" />
-            <stop offset="50%" stopColor="rgba(150,170,220,.10)" />
-            <stop offset="100%" stopColor="rgba(120,140,190,0)" />
-          </linearGradient>
-        </defs>
         <rect x={0} y={(90 - -20) / 180 * MAP_H} width={MAP_W} height={MAP_H * 0.45} fill="url(#milkyway)" />
         {STARS.map((star, i) => (
           <circle key={i} cx={star.x} cy={star.y} r={star.r} fill="#fff" opacity={star.opacity} />
@@ -248,6 +241,25 @@ export default function SkyMapPage() {
     setPan({ x: viewport.width / 2 - center.x, y: viewport.height / 2 - center.y });
   };
 
+  // Horizontal wrap: a pin at RA r can appear at r + k·360°. Precompute a flat
+  // list of on-screen pin copies so pins stay visible across the 0°/360° seam.
+  const pinItems = useMemo(() => {
+    const period = MAP_W * zoom;
+    const items: { obs: SkyMapItem; x: number; y: number; key: string }[] = [];
+    for (const obs of observations) {
+      const y = worldToScreen(obs.ra, obs.dec, zoom).y + pan.y;
+      if (y < -20 || y > viewport.height + 20) continue;
+      let base = (((obs.ra / 360) * MAP_W) * zoom + pan.x) % period;
+      if (base < 0) base += period;
+      for (let x = base - period; x <= viewport.width + period; x += period) {
+        if (x > -20 && x < viewport.width + 20) {
+          items.push({ obs, x, y, key: `${obs.observation_id}-${Math.round(x)}` });
+        }
+      }
+    }
+    return items;
+  }, [observations, zoom, pan, viewport.width, viewport.height]);
+
   return (
     <Box sx={{ minHeight: "100dvh" }}>
       <Box sx={{ bgcolor: "#0b3d91", color: "#fff", py: 1.5, borderTop: "3px solid #f64137" }}>
@@ -303,31 +315,40 @@ export default function SkyMapPage() {
                 userSelect: "none",
               }}
             >
-              {/* World-space starfield + grid, moved via CSS transform (no per-star recompute). */}
+              {/* World-space starfield + grid, moved via CSS transform (no per-star recompute).
+                  Tiled 3× horizontally so panning wraps seamlessly across the RA seam. The
+                  trailing translate(-MAP_W) keeps the middle tile aligned with the pins. */}
               <svg
                 style={{
                   position: "absolute",
                   left: 0,
                   top: 0,
                   pointerEvents: "none",
-                  transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                  transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) translate(${-MAP_W}px, 0px)`,
                   transformOrigin: "0 0",
                 }}
-                width={MAP_W}
+                width={MAP_W * 3}
                 height={MAP_H}
-                viewBox={`0 0 ${MAP_W} ${MAP_H}`}
+                viewBox={`0 0 ${MAP_W * 3} ${MAP_H}`}
               >
-                {worldLayers}
+                <defs>
+                  <linearGradient id="milkyway" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="rgba(120,140,190,0)" />
+                    <stop offset="50%" stopColor="rgba(150,170,220,.10)" />
+                    <stop offset="100%" stopColor="rgba(120,140,190,0)" />
+                  </linearGradient>
+                </defs>
+                <g transform={`translate(0 0)`}>{worldLayers}</g>
+                <g transform={`translate(${MAP_W} 0)`}>{worldLayers}</g>
+                <g transform={`translate(${MAP_W * 2} 0)`}>{worldLayers}</g>
               </svg>
 
               {/* Pins */}
-              {observations.map((o) => {
-                const p = toScreen(o.ra, o.dec);
+              {pinItems.map(({ obs: o, x, y, key }) => {
                 const isSelected = selected?.observation_id === o.observation_id;
-                if (p.x < -20 || p.x > viewport.width + 20 || p.y < -20 || p.y > viewport.height + 20) return null;
                 return (
                   <Button
-                    key={o.observation_id}
+                    key={key}
                     aria-label={`View observation at RA ${o.ra.toFixed(2)}, Dec ${o.dec.toFixed(2)}`}
                     onPointerDown={(event) => event.stopPropagation()}
                     onPointerUp={(event) => event.stopPropagation()}
@@ -337,8 +358,8 @@ export default function SkyMapPage() {
                     }}
                     sx={{
                       position: "absolute",
-                      left: p.x,
-                      top: p.y,
+                      left: x,
+                      top: y,
                       minWidth: 0,
                       width: 20,
                       height: 20,
