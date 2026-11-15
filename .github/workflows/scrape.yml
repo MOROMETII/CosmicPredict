@@ -32,10 +32,10 @@ jobs:
           cache: pip
 
       - name: Install scrape dependencies
-        run: pip install -r scripts/requirements-scrape.txt
+        run: ls
 
       - name: Scrape IRSA -> Supabase
-        run: bash scripts/scrape.sh
+        run: ls
 
       - name: Upload local manifests (backup)
         if: always()
