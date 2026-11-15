@@ -152,12 +152,8 @@ class FeedItem(BaseModel):
     band: str | None = None
     n_frames: int
     region_key: str  # which cached region this tile belongs to
-    score: int = 0  # social engagement score (flags + comments + gifs + people + saves)
-    flags: int = 0
-    comments: int = 0
-    gifs: int = 0
-    people: int = 0
-    saves: int = 0
+    score: int = 0  # number of likes
+    likes: int = 0
 
 
 class FeedResponse(BaseModel):
@@ -208,65 +204,22 @@ class MarksResponse(BaseModel):
     caveats: list[str] = Field(default_factory=list)
 
 
-class CommentCreateRequest(BaseModel):
-    """Post a comment on a sky region (the Sky Scroll reels)."""
-
-    region_key: str = Field(..., max_length=64)
-    author: str | None = Field(default=None, max_length=64)
-    body: str = Field(default="", max_length=2000)
-    gif_url: str | None = Field(default=None, max_length=2048)
-    gif_still_url: str | None = Field(default=None, max_length=2048)
-    gif_title: str | None = Field(default=None, max_length=256)
-
-
-class CommentResponse(BaseModel):
-    id: str
-    region_key: str
-    author: str
-    body: str
-    gif_url: str | None = None
-    gif_still_url: str | None = None
-    gif_title: str | None = None
-    created_at: str
-
-
-class CommentsResponse(BaseModel):
-    status: str
-    region_key: str
-    comments: list[CommentResponse] = Field(default_factory=list)
-    caveats: list[str] = Field(default_factory=list)
-
-
-class GifResponse(BaseModel):
-    id: str
-    title: str
-    preview_url: str
-    gif_url: str
-
-
-class GifsResponse(BaseModel):
-    status: str
-    query: str
-    gifs: list[GifResponse] = Field(default_factory=list)
-
-
-class SaveCreateRequest(BaseModel):
-    """A double-tap "save" (like) on a sky region."""
+class LikeCreateRequest(BaseModel):
+    """A like on a sky region."""
 
     region_key: str = Field(..., max_length=64)
 
 
-class SaveResponse(BaseModel):
+class LikeResponse(BaseModel):
     id: str
     region_key: str
     created_at: str
 
 
-class SavesResponse(BaseModel):
+class LikesResponse(BaseModel):
     status: str
     region_key: str
     count: int
-    saved: bool = False
 
 
 class SurveyItem(BaseModel):
@@ -276,17 +229,32 @@ class SurveyItem(BaseModel):
     ra: float
     dec: float
     score: int
-    flags: int
-    comments: int
-    gifs: int
-    people: int
-    saves: int
+    likes: int
     preview_url: str | None = None
 
 
 class SurveyResponse(BaseModel):
     status: str
     regions: list[SurveyItem] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
+
+
+class SkyMapItem(BaseModel):
+    """One observation shown on the homepage, for the sky-map pins."""
+
+    observation_id: str
+    ra: float
+    dec: float
+    epoch: datetime | None = None
+    band: str | None = None
+    wavelength: float | None = None
+    source: str = "cached"
+    preview_url: str | None = None
+
+
+class SkyMapResponse(BaseModel):
+    status: str
+    observations: list[SkyMapItem] = Field(default_factory=list)
     caveats: list[str] = Field(default_factory=list)
 
 
