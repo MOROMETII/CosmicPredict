@@ -58,9 +58,9 @@ export default function LeaderboardPage() {
 
       <Container maxWidth="lg" sx={{ py: 3 }}>
         <Alert severity="info" sx={{ mb: 2.5 }}>
-          Regions ranked by how much people interacted with them — flags, comments, GIFs, saves, and
-          distinct people. This is a social measure, not a scientific ranking: a high score means
-          people talked about it, not that the sky is objectively more interesting.
+          Regions ranked by how many likes they received. This is a social measure, not a scientific
+          ranking — more likes means people found it interesting, not that the sky is objectively
+          more interesting.
         </Alert>
 
         {error && (
@@ -77,7 +77,7 @@ export default function LeaderboardPage() {
           <Stack alignItems="center" spacing={1.5} sx={{ py: 6, textAlign: "center" }}>
             <Typography sx={{ fontWeight: 700 }}>No interactions yet</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 420 }}>
-              Flag, comment, GIF, or save a sky region in Sky Scroll and it will show up here.
+              Like a sky region in Sky Scroll and it will show up here.
             </Typography>
             <Button component={Link} href="/scroll" variant="contained" startIcon={<TravelExplore />}>
               Explore the sky
@@ -133,11 +133,11 @@ export default function LeaderboardPage() {
                       RA {region.ra.toFixed(2)}° · Dec {region.dec.toFixed(2)}°
                     </Typography>
                     <Stack direction="row" spacing={0.5} sx={{ mt: 0.5, flexWrap: "wrap" }}>
-                      {region.flags > 0 && <Chip size="small" label={`${region.flags} flags`} sx={{ height: 20, fontSize: 11 }} />}
-                      {region.comments > 0 && <Chip size="small" label={`${region.comments} comments`} sx={{ height: 20, fontSize: 11 }} />}
-                      {region.gifs > 0 && <Chip size="small" label={`${region.gifs} gifs`} sx={{ height: 20, fontSize: 11 }} />}
-                      {region.saves > 0 && <Chip size="small" label={`${region.saves} saves`} sx={{ height: 20, fontSize: 11 }} />}
-                      {region.people > 0 && <Chip size="small" label={`${region.people} people`} sx={{ height: 20, fontSize: 11 }} />}
+                      <Chip
+                        size="small"
+                        label={`${region.likes} like${region.likes === 1 ? "" : "s"}`}
+                        sx={{ height: 20, fontSize: 11 }}
+                      />
                     </Stack>
                   </Box>
 
